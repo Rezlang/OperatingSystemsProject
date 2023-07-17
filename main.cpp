@@ -6,7 +6,7 @@
 #include <vector>
 
 struct process {
-  process();
+  process() {}
   char id;
   int arrivalTime;
   std::vector<std::pair<int, int>*> burstTimes;
@@ -16,7 +16,7 @@ struct process {
 inline double next_exp(float lambda, int upperBound) {
   int num = upperBound;
   while (num > upperBound - 1) num = -log(drand48()) / lambda;
-  return num;
+  return num + 1;
 }
 
 /* <<< PROJECT PART I -- process set (n=3) with 1 CPU-bound process >>>
@@ -53,13 +53,23 @@ CPU-bound process C: arrival time 26ms; 60 CPU bursts:
 
 int partOneOutput(std::vector<process*> processes, int numCPUProc) {
   std::cout << "<<< PROJECT PART I -- process set (n=" << processes.size()
-            << ") with " << numCPUProc << " CPU-bound process >>>" << std::endl;
-  for (int i = 0; i < processes.size(); ++i) {
-    std::cout << "I/O-bound process " << processes[i]->id << ": arrival time "
+            << ") with " << numCPUProc << " CPU-bound ";
+  if (numCPUProc > 1)
+    std::cout << "processes >>>" << std::endl;
+  else
+    std::cout << "process >>>" << std::endl;
+
+  for (unsigned int i = 0; i < processes.size(); ++i) {
+    if (processes[i]->isCPUBound)
+      std::cout << "CPU-bound process ";
+    else
+      std::cout << "I/O-bound process ";
+
+    std::cout << processes[i]->id << ": arrival time "
               << processes[i]->arrivalTime << "ms; "
               << processes[i]->burstTimes.size() << " CPU bursts:" << std::endl;
-    for (int j = 0; j < processes[i]->burstTimes.size(); ++j) {
-      if (j == processes[i]->burstTimes.size() - 1)
+    for (unsigned int j = 0; j < processes[i]->burstTimes.size(); ++j) {
+      if (j != processes[i]->burstTimes.size() - 1)
         std::cout << "--> CPU burst " << processes[i]->burstTimes[j]->first
                   << "ms --> I/O burst " << processes[i]->burstTimes[j]->second
                   << "ms" << std::endl;
@@ -68,6 +78,7 @@ int partOneOutput(std::vector<process*> processes, int numCPUProc) {
                   << "ms" << std::endl;
     }
   }
+  return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -131,7 +142,7 @@ int main(int argc, char* argv[]) {
     processes.push_back(new process());
     processes[i]->isCPUBound = (i >= numProc - numCPUProc);
     processes[i]->id = 65 + i;
-    processes[i]->arrivalTime = floor(next_exp(lambda, upperBound));
+    processes[i]->arrivalTime = floor(next_exp(lambda, upperBound)) - 1;
     int numCPUBursts = ceil(drand48() * 64);
 
     if (processes[i]->isCPUBound) {
@@ -152,4 +163,7 @@ int main(int argc, char* argv[]) {
           new std::pair<int, int>(ceil(next_exp(lambda, upperBound)), 0));
     }
   }
+
+  partOneOutput(processes, numCPUProc);
+  return 0;
 }
