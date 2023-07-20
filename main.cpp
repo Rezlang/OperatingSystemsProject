@@ -54,10 +54,10 @@ CPU-bound process C: arrival time 26ms; 60 CPU bursts:
 int partOneOutput(std::vector<process*> processes, int numCPUProc) {
   std::cout << "<<< PROJECT PART I -- process set (n=" << processes.size()
             << ") with " << numCPUProc << " CPU-bound ";
-  if (numCPUProc > 1)
-    std::cout << "processes >>>" << std::endl;
-  else
+  if (numCPUProc == 1)
     std::cout << "process >>>" << std::endl;
+  else
+    std::cout << "processes >>>" << std::endl;
 
   for (unsigned int i = 0; i < processes.size(); ++i) {
     if (processes[i]->isCPUBound)
@@ -67,7 +67,13 @@ int partOneOutput(std::vector<process*> processes, int numCPUProc) {
 
     std::cout << processes[i]->id << ": arrival time "
               << processes[i]->arrivalTime << "ms; "
-              << processes[i]->burstTimes.size() << " CPU bursts:" << std::endl;
+              << processes[i]->burstTimes.size();
+    if (processes[i]->burstTimes.size() == 1) {
+      std::cout << " CPU burst:" << std::endl;
+    } else {
+      std::cout << " CPU bursts:" << std::endl;
+    }
+
     for (unsigned int j = 0; j < processes[i]->burstTimes.size(); ++j) {
       if (j != processes[i]->burstTimes.size() - 1)
         std::cout << "--> CPU burst " << processes[i]->burstTimes[j]->first
