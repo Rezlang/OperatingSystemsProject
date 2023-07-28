@@ -2,18 +2,51 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <queue>
 #include <utility>
 #include <vector>
 
-// Our process object.
-struct process {
-  // Default constructor because values are populated manually
-  process() {}
-  char id;
-  int arrivalTime;
-  std::vector<std::pair<int, int>*> burstTimes;
-  bool isCPUBound;
+#include "process.h"
+// https://submitty.cs.rpi.edu/courses/u23/csci4210/course_material/lectures/06-22/06-22-notes.txt
+
+struct roundRobin;
+struct SJF;
+void roundRobinFunc(int maxTime, processManager manager);
+std::string RRGetContents(
+    std::priority_queue<process, std::vector<process>, roundRobin> q);
+
+struct incomingProcesses {
+  bool operator()(const process& a, const process& b) {
+    if (a.arrivalTime == b.arrivalTime) return a.id > b.id;
+    return a.arrivalTime > b.arrivalTime;
+  }
 };
+
+// First Come First Serve Algorithm
+struct FCFS {
+  bool operator()(const process& a, const process& b) {
+    if (a.emplacedTime == b.emplacedTime) return a.id > b.id;
+    return a.emplacedTime > b.emplacedTime;
+  }
+};
+
+void firstComeFirstServedFunc(processManager manager);
+void shortestTimeRemainingFunc(processManager manager);
+
+/*FUNCTION TO GET CONTENTS OF QUEUE AS STRING
+
+  q = orginalqueue;
+  std::string contents = "[Q";
+  if (q.size() == 0) return contents += "<empty>]";
+
+  process t;
+  while(q.size() != 0) {
+    t = q.top();
+    contents += t.id + " ";
+    q.pop();
+  }
+  return contents += "]";
+*/
 
 // Returns a randomly generated double sized according to the project
 // specifications
@@ -48,31 +81,32 @@ int partOneOutput(std::vector<process*> processes, int numCPUProc) {
       std::cout << " CPU bursts:" << std::endl;
     }
     // Print information about each burst
-    for (unsigned int j = 0; j < processes[i]->burstTimes.size(); ++j) {
-      if (j != processes[i]->burstTimes.size() - 1)
-        std::cout << "--> CPU burst " << processes[i]->burstTimes[j]->first
-                  << "ms --> I/O burst " << processes[i]->burstTimes[j]->second
-                  << "ms" << std::endl;
-      else
-        std::cout << "--> CPU burst " << processes[i]->burstTimes[j]->first
-                  << "ms" << std::endl;
-    }
+    // for (unsigned int j = 0; j < processes[i]->burstTimes.size(); ++j) {
+    //   if (j != processes[i]->burstTimes.size() - 1)
+    //     std::cout << "--> CPU burst " << processes[i]->burstTimes[j]->first
+    //               << "ms --> I/O burst " <<
+    //               processes[i]->burstTimes[j]->second
+    //               << "ms" << std::endl;
+    //   else
+    //     std::cout << "--> CPU burst " << processes[i]->burstTimes[j]->first
+    //               << "ms" << std::endl;
+    // }
   }
   return 0;
 }
 
 int main(int argc, char* argv[]) {
   // Check the number of command line arguments
-  if (argc != 6) {
-    std::cerr << "Error: Invalid number of command line arguments. Expected 5 "
+  if (argc != 9) {
+    std::cerr << "Error: Invalid number of command line arguments. Expected 8 "
                  "arguments."
               << std::endl;
     return 1;  // Returning non-zero value to indicate error
   }
 
   // Parse and store the command line arguments
-  int numProc, numCPUProc, seed, upperBound;
-  float lambda;
+  int numProc, numCPUProc, seed, upperBound, tCS, tSlice;
+  float lambda, alpha;
 
   if (std::sscanf(argv[1], "%d", &numProc) != 1) {
     std::cerr << "Error: First argument should be of type int." << std::endl;
@@ -98,6 +132,22 @@ int main(int argc, char* argv[]) {
     std::cerr << "Error: Fifth argument should be of type int." << std::endl;
     return 1;
   }
+
+  if (std::sscanf(argv[6], "%d", &tCS) != 1) {
+    std::cerr << "Error: Sixth argument should be of type int." << std::endl;
+    return 1;
+  }
+
+  if (std::sscanf(argv[7], "%f", &alpha) != 1) {
+    std::cerr << "Error: Seventh argument shold be of type float." << std::endl;
+    return 1;
+  }
+
+  if (std::sscanf(argv[8], "%d", &tSlice) != 1) {
+    std::cerr << "Error: Eighth argument should be of type int." << std::endl;
+    return 1;
+  }
+
   // Additional error checking
   if (numProc < numCPUProc) {
     return 2;
@@ -105,7 +155,16 @@ int main(int argc, char* argv[]) {
   if (numProc < 1 || numProc > 26) {
     return 2;
   }
-  if (lambda <= 0) {
+  if (lambda <= 0.) {
+    return 2;
+  }
+  if (tCS < 0 || tCS % 2 == 1) {
+    return 2;
+  }
+  if (alpha < 0. || alpha > 1.) {
+    return 2;
+  }
+  if (tSlice < 0) {
     return 2;
   }
 
@@ -119,6 +178,10 @@ int main(int argc, char* argv[]) {
     processes[i]->isCPUBound = (i >= numProc - numCPUProc);
     processes[i]->id = 65 + i;
     processes[i]->arrivalTime = floor(next_exp(lambda, upperBound)) - 1;
+    processes[i]->emplacedTime = processes[i]->arrivalTime;
+    processes[i]->tau = ceil(1 / lambda);
+    processes[i]->waitTime = processes[i]->estimatedCPUTime =
+        processes[i]->turnAroundtime = 0;
     int numCPUBursts = ceil(drand48() * 64);
 
     // Generate bursts for both CPU bound and IO Bound processes
@@ -140,7 +203,11 @@ int main(int argc, char* argv[]) {
           new std::pair<int, int>(ceil(next_exp(lambda, upperBound)), 0));
     }
   }
-  // Output data
+
   partOneOutput(processes, numCPUProc);
+
+  // Initialize processManager...
+  processManager manager;
+
   return 0;
 }
