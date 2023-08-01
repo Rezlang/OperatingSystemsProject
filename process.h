@@ -1,4 +1,6 @@
 // Our process object.
+// estimatedCPUTime might just be the same thing as tau.
+// Currently it's initialized to 0, while tau is init to 1/lambda.
 struct process {
   char id;
   int arrivalTime;

@@ -39,7 +39,7 @@ void roundRobinFunc(int maxTime, processManager manager) {
     while (current.burstTimes[finder]->first == 0) ++finder;
     int burstTime = current.burstTimes[finder]->first;
     if (manager.burstTimeCounter + burstTime > nextProcess.arrivalTime) {
-      // New process is arriving MAKE ITS OWN FUNCTION
+      // New process is arriving MAKE ITS OWN FUNCTION pass by reference
       process p = manager.incoming.top();
       manager.incoming.pop();
       p.emplacedTime = p.arrivalTime;
