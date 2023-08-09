@@ -4,7 +4,6 @@ import sys
 from typing import List, Tuple
 from enum import Enum
 
-
 class Rand48:
     # class to handle rand48 style of random number generation
     # source: Dietrich Epp on stackoverflow
@@ -21,9 +20,7 @@ class Rand48:
     def drand(self):
         return self.next() / 2**48
 
-
 randomizer = Rand48()
-
 
 class Status(Enum):
     UNARRIVED = -1
@@ -32,7 +29,6 @@ class Status(Enum):
     RUNNING = 2
     WAITING = 3
     SWITCHING_OUT = 4
-
 
 class Process:
     def __init__(self):
@@ -43,13 +39,11 @@ class Process:
         self.status = Status.UNARRIVED
         self.switchingTimer = 0
 
-
 class manager:
     def __init__(self, processes):
         self.generatedProcesses: List[Process] = processes
         self.readyQueue: List[Process] = []
         self.activeProcess: Process = self.generatedProcesses[0]
-
 
 def FirstComeFirstServe(processes, contextSwitchTime):
     print("time 0ms: Simulator started for FCFS [Q <empty>]")
@@ -68,7 +62,7 @@ def FirstComeFirstServe(processes, contextSwitchTime):
                 PM.activeProcess.status = Status.RUNNING
                 # time 28ms: Process C started using the CPU for 2920ms burst [Q <empty>]
                 print("time ", time, "ms: Process "+PM.activeProcess.id + " started using the CPU for ",
-                      PM.activeProcess.burstTimes[0][0], "ms burst", end="", sep='')
+                      PM.activeProcess.burstTimes[0][0], "ms burst ", end="", sep='')
 
                 if len(PM.readyQueue) != 0:
                     print("[Q ", " ".join(x.id for x in PM.readyQueue), "]", sep='')
@@ -83,17 +77,14 @@ def FirstComeFirstServe(processes, contextSwitchTime):
                 PM.activeProcess = PM.readyQueue[0]
                 PM.readyQueue.pop(0)
                 PM.activeProcess.status = Status.SWITCHING_IN
-                PM.activeProcess.switchingTimer = contextSwitchTime / 2
+                PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
             else:
                 PM.activeProcess.switchingTimer -= 1
 
         if PM.activeProcess.status == Status.RUNNING:
             if PM.activeProcess.burstTimes[0][0] == 0:
-                # worry about this
-                # time 2948ms: Process C completed a CPU burst; 59 bursts to go [Q A B]
-                # time 2948ms: Process C switching out of CPU; blocking on I/O until time 3318ms [Q A B]
                 print("time ", time, "ms: Process "+PM.activeProcess.id + " completed a CPU burst; ",
-                      len(PM.activeProcess.burstTimes)-1, " bursts to go", end="", sep='')
+                      len(PM.activeProcess.burstTimes)-1, " bursts to go ", end="", sep='')
 
                 if len(PM.readyQueue) != 0:
                     print(
@@ -109,7 +100,7 @@ def FirstComeFirstServe(processes, contextSwitchTime):
                 else:
                     print("[Q <empty>]")
 
-                PM.activeProcess.switchingTimer = contextSwitchTime / 2
+                PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
                 PM.activeProcess.status = Status.SWITCHING_OUT
             else:
                 PM.activeProcess.burstTimes[0][0] -= 1
@@ -146,13 +137,11 @@ def FirstComeFirstServe(processes, contextSwitchTime):
 
         time += 1
 
-
 def next_exp(lambda_: float, upperBound: int) -> int:
     num = upperBound
     while num > upperBound - 1:
         num = int(-math.log(randomizer.drand()) / lambda_)
     return num + 1
-
 
 def partOneOutput(processes: List[Process], numCPUProc: int) -> int:
     print('<<< PROJECT PART I -- process set (n=' + str(len(processes)) + ') with ' +
@@ -169,7 +158,6 @@ def partOneOutput(processes: List[Process], numCPUProc: int) -> int:
     #             print('--> CPU burst ' +
     #                   str(processes[i].burstTimes[j][0]) + 'ms')
     return 0
-
 
 def main(argv):
     if len(argv) != 9:
@@ -223,7 +211,6 @@ def main(argv):
     FirstComeFirstServe(fcfsProcesses, contextSwitchTime)
 
     return 0
-
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
