@@ -36,26 +36,33 @@ class Process:
         self.id = ''
         self.arrivalTime = 0
         self.burstTimes: List[List[int]] = []
-        self.waitTime = 0
         self.isCPUBound = False
         self.status = Status.UNARRIVED
         self.switchingTimer = 0
         self.numContextSwitches = 0
         self.numBursts = 0
+        self.waitTime = 0
+        self.turnaroundTime: List[int] = []
+        self.reachedCPU: List[bool] = []
+        self.turnaroundIndex = 0
+
 
 class manager:
-    def __init__(self, processes):
+    def __init__(self, processes, numCPUProc):
         self.generatedProcesses: List[Process] = processes
         self.readyQueue: List[Process] = []
         self.activeProcess: Process = self.generatedProcesses[0]
         self.busyTime = 0
+        self.numCPU = numCPUProc
         self.avgCPUBurst = sum(sum(q[0] for q in p.burstTimes) for p in self.generatedProcesses) / sum(len(p.burstTimes) for p in self.generatedProcesses)
-        self.maxCPUBurst = max(sum(q[0] for q in p.burstTimes) / len(p.burstTimes) for p in self.generatedProcesses)
-        self.minCPUBurst = min(sum(q[0] for q in p.burstTimes) / len(p.burstTimes) for p in self.generatedProcesses)
+        self.avgCPUProcBurst = sum(sum(q[0] for q in p.burstTimes) if p.isCPUBound else 0 for p in self.generatedProcesses) / sum(len(p.burstTimes) if p.isCPUBound else 0 for p in self.generatedProcesses)
+        self.avgIOProcBurst = sum(sum(q[0] for q in p.burstTimes) if not p.isCPUBound else 0 for p in self.generatedProcesses) / sum(len(p.burstTimes) if not p.isCPUBound else 0 for p in self.generatedProcesses)
 
-def FirstComeFirstServe(processes, contextSwitchTime):
+def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
     print("time 0ms: Simulator started for FCFS [Q <empty>]")
-    PM = manager(processes)
+    PM = manager(processes, numCPUProc)
+    PM.activeProcess.numContextSwitches += 1
+    PM.activeProcess.reachedCPU[0] = True
     PM.activeProcess.status = Status.SWITCHING_IN
     PM.activeProcess.switchingTimer = contextSwitchTime / 2
     time = PM.activeProcess.arrivalTime
@@ -82,14 +89,17 @@ def FirstComeFirstServe(processes, contextSwitchTime):
 
         elif PM.activeProcess.status == Status.SWITCHING_OUT:
             if PM.activeProcess.switchingTimer == 0:
+                
                 if (PM.activeProcess.burstTimes[0][1] == 0):
                     PM.activeProcess.status = Status.TERMINATED
                 else:
                     PM.activeProcess.status = Status.WAITING
                     if len(PM.readyQueue) != 0:
                         PM.activeProcess = PM.readyQueue[0]
+
                         PM.readyQueue.pop(0)
                         PM.activeProcess.numContextSwitches += 1
+                        PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
                         PM.activeProcess.status = Status.SWITCHING_IN
                         PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
             else:
@@ -98,6 +108,7 @@ def FirstComeFirstServe(processes, contextSwitchTime):
         if (PM.activeProcess.status == Status.WAITING or PM.activeProcess.status == Status.READY or PM.activeProcess.status == Status.TERMINATED) and len(PM.readyQueue) != 0:
             PM.activeProcess = PM.readyQueue[0]
             PM.readyQueue.pop(0)
+            PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
             PM.activeProcess.numContextSwitches += 1
             PM.activeProcess.status = Status.SWITCHING_IN
             PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
@@ -105,6 +116,7 @@ def FirstComeFirstServe(processes, contextSwitchTime):
 
         if PM.activeProcess.status == Status.RUNNING:
             if PM.activeProcess.burstTimes[0][0] == 0:
+                
                 if len(PM.activeProcess.burstTimes) == 1:
                     print("time ", time, "ms: Process ", PM.activeProcess.id, " terminated ", sep="", end="")
                     if len(PM.readyQueue) != 0:
@@ -129,6 +141,9 @@ def FirstComeFirstServe(processes, contextSwitchTime):
                     else:
                         print("[Q <empty>]")
 
+                if len(PM.activeProcess.burstTimes) != 1:
+                    PM.activeProcess.turnaroundIndex += 1
+
                 PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
                 PM.activeProcess.status = Status.SWITCHING_OUT
             else:
@@ -142,6 +157,7 @@ def FirstComeFirstServe(processes, contextSwitchTime):
                     if len(PM.readyQueue) == 0 and PM.activeProcess.status != Status.RUNNING:
                         PM.activeProcess = p
                         PM.activeProcess.numContextSwitches += 1
+                        PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
                         p.status = Status.SWITCHING_IN
                         p.switchingTimer = contextSwitchTime / 2 - 1
                     else:
@@ -163,9 +179,10 @@ def FirstComeFirstServe(processes, contextSwitchTime):
         for p in PM.generatedProcesses:
             if p.status == Status.RUNNING:
                 PM.busyTime += 1
-            if p.status == Status.WAITING:
+            if p.status == Status.READY:
                 p.waitTime += 1
-
+            if p.status == Status.SWITCHING_IN or p.status == Status.SWITCHING_OUT or p.status == Status.RUNNING or p.status == Status.WAITING:
+                p.turnaroundTime[p.turnaroundIndex] += 1
             if p.arrivalTime <= time and p.status == Status.UNARRIVED:
                 PM.readyQueue.append(p)
                 if time < 10000:
@@ -181,7 +198,7 @@ def FirstComeFirstServe(processes, contextSwitchTime):
     #time 324063ms: Simulator ended for FCFS [Q <empty>]
     print("time ",time,"ms: Simulator ended for FCFS [Q <empty>]", sep="")
     fn = "simout.txt"      
-    fp = open(fn, "a")
+    fp = open(fn, "w")
 #     Algorithm FCFS
 # -- CPU utilization: 84.253%
 # -- average CPU burst time: 3067.776 ms (4071.000 ms/992.138 ms)
@@ -193,11 +210,17 @@ def FirstComeFirstServe(processes, contextSwitchTime):
 
     print("Algorithm FCFS", file=fp)
     print("-- CPU utililization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
-    print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(PM.avgCPUBurst, PM.maxCPUBurst, PM.minCPUBurst), file=fp)
-    # avgWaits = [p.waitTime / p.numBursts for p in PM.generatedProcesses]
-    # tmp = sum(p.waitTime for p in PM.generatedProcesses) / sum(p.numBursts for p in PM.generatedProcesses)
-    # print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format( tmp / len(PM.generatedProcesses), max(avgWaits), min(avgWaits)), file = fp)
-    print("-- number of context switches: {:d} ({:d}/{:d})".format())
+    print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(PM.avgCPUBurst, PM.avgCPUProcBurst, PM.avgIOProcBurst), file=fp)
+
+    print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format( sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses),
+                                                                          sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if p.isCPUBound else 0 for p in PM.generatedProcesses),
+                                                                          sum(p.waitTime if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("-- number of context switches: {:d} ({:d}/{:d})".format(sum(p.numContextSwitches for p in PM.generatedProcesses),
+                                                                   sum(p.numContextSwitches if p.isCPUBound else 0 for p in PM.generatedProcesses),
+                                                                   sum(p.numContextSwitches if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("-- average turnaround time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(sum(sum(p.turnaroundTime) for p in PM.generatedProcesses) / sum(p.numBursts for p in PM.generatedProcesses),
+                                                                            sum(sum(p.turnaroundTime) if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(p.numBursts if p.isCPUBound else 0 for p in PM.generatedProcesses),
+                                                                            sum(sum(p.turnaroundTime) if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(p.numBursts if not p.isCPUBound else 0  for p in PM.generatedProcesses)), file=fp)
     fp.close()
 
 
@@ -246,6 +269,8 @@ def main(argv):
         p.id = chr(65 + i)
         p.arrivalTime = math.floor(next_exp(lambda_, upperBound)) - 1
         numCPUBursts = math.ceil(randomizer.drand() * 64)
+        p.turnaroundTime = [0] * numCPUBursts
+        p.reachedCPU = [False] * numCPUBursts
         p.numBursts = (numCPUBursts * 2) - 1
         if p.isCPUBound:
             for j in range(numCPUBursts - 1):
@@ -267,7 +292,7 @@ def main(argv):
           "ms; alpha=", alpha, "; t_slice=", timeSlice, "ms >>>", sep="")
 
     fcfsProcesses = sorted(processes, key=lambda Process: Process.arrivalTime)
-    FirstComeFirstServe(fcfsProcesses, contextSwitchTime)
+    FirstComeFirstServe(fcfsProcesses, contextSwitchTime, numCPUProc)
 
     return 0
 
