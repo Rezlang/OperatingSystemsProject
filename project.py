@@ -57,9 +57,7 @@ class Process:
         self.turnaroundIndex = 0
         self.numPreemptions = 0
         self.tau = 0
-        self.CPUBursts: List[int] = []
         self.timeRunning = 0
-        self.currentBurstTotal = 0
         self.OGBurstTimes: List[List[int]] = []
 
     def __lt__(self, other):
@@ -67,7 +65,7 @@ class Process:
 
     def recalcTau(self, alpha):
         self.tau = math.ceil(
-            alpha * self.CPUBursts[self.turnaroundIndex] + (1-alpha) * self.tau)
+            alpha * self.OGBurstTimes[self.turnaroundIndex][0] + (1-alpha) * self.tau)
         return self.tau
 
 
@@ -267,7 +265,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
 
     print("Algorithm FCFS", file=fp)
     print(
-        "-- CPU utililization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
+        "-- CPU utilization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
     print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(round(
         PM.avgCPUBurst), round(PM.avgCPUProcBurst), round(PM.avgIOProcBurst)), file=fp)
 
@@ -286,7 +284,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
                                                           sum(
                                                               p.numPreemptions if p.isCPUBound else 0 for p in PM.generatedProcesses),
                                                           sum(p.numPreemptions if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
-    print()
+    print("", file=fp)
     fp.close()
 
 
@@ -441,9 +439,9 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
 
     print("Algorithm SJF", file=fp)
     print(
-        "-- CPU utililization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
+        "-- CPU utilization: {:.3f}%".format(round(PM.busyTime / time * 100)), file=fp)
     print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(
-        PM.avgCPUBurst, PM.avgCPUProcBurst, PM.avgIOProcBurst), file=fp)
+        round(PM.avgCPUBurst), round(PM.avgCPUProcBurst), round(PM.avgIOProcBurst)), file=fp)
 
     print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(round(sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses)),
                                                                          round(sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(
@@ -461,6 +459,7 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
                                                           sum(
                                                               p.numPreemptions if p.isCPUBound else 0 for p in PM.generatedProcesses),
                                                           sum(p.numPreemptions if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("", file=fp)
     fp.close()
 
 
@@ -647,9 +646,9 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
 
     print("Algorithm RR", file=fp)
     print(
-        "-- CPU utililization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
+        "-- CPU utilization: {:.3f}%".format(round(PM.busyTime / time * 100)), file=fp)
     print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(
-        PM.avgCPUBurst, PM.avgCPUProcBurst, PM.avgIOProcBurst), file=fp)
+        round(PM.avgCPUBurst), round(PM.avgCPUProcBurst), round(PM.avgIOProcBurst)), file=fp)
 
     print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses),
                                                                          sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(
@@ -732,7 +731,6 @@ def main(argv):
                 p.burstTimes.append([math.ceil(next_exp(lambda_, upperBound)),
                                     math.ceil(next_exp(lambda_, upperBound)) * 10])
             p.burstTimes.append([math.ceil(next_exp(lambda_, upperBound)), 0])
-        p.CPUBursts = [row[0] for row in p.burstTimes]
         p.OGBurstTimes = deepcopy(p.burstTimes)
         processes.append(p)
 
