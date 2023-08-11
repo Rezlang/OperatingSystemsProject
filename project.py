@@ -58,6 +58,7 @@ class Process:
         self.tau = 0
         self.timeRunning = 0
         self.OGBurstTimes: List[List[int]] = []
+        self.emplacedTime = 0
 
     def __lt__(self, other):
         return self.id < other.id
@@ -411,8 +412,9 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
                     else:
                         p.status = Status.READY
                         pTuple = (p.tau, p)
-                        heapq.heappush(PM.readyQueue, pTuple)
-                        
+                        # heapq.heappush(PM.readyQueue, pTuple)
+                        PM.readyQueue.append(pTuple)
+                        PM.readyQueue.sort(key= lambda x: (x[0], x[1].id))
                         # time 3318ms: Process C completed I/O; added to ready queue [Q B C]
                         if time < 10000:
                             print("time ", time, "ms: Process " + p.id +
@@ -433,7 +435,10 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
         for p in PM.generatedProcesses:
             if p.arrivalTime <= time and p.status == Status.UNARRIVED:
                 pTuple = (p.tau, p)
-                heapq.heappush(PM.readyQueue, pTuple)
+                # heapq.heappush(PM.readyQueue, pTuple)
+                PM.readyQueue.append(pTuple)
+                PM.readyQueue.sort(key= lambda x: (x[0], x[1].id))
+
                 if time < 10000:
                     print("time ", time, "ms: Process " + p.id +
                           " (tau ", p.tau, "ms) arrived; added to ready queue [Q ", " ".join(x[1].id for x in PM.readyQueue), "]", sep='')
@@ -500,6 +505,7 @@ def ShortestRemainingTime(processes, contextSwitchTime, numCPUProc, alpha):
         if PM.activeProcess.status == Status.SWITCHING_IN:
             if PM.activeProcess.switchingTimer == 0:
                 PM.activeProcess.status = Status.RUNNING
+                PM.activeProcess.emplacedTime = time
                 # time 28ms: Process C started using the CPU for 2920ms burst [Q <empty>]
                 if time < 10000:
                     if (PM.activeProcess.burstTimes[0][0] != PM.activeProcess.OGBurstTimes[PM.activeProcess.turnaroundIndex][0]):
@@ -525,8 +531,10 @@ def ShortestRemainingTime(processes, contextSwitchTime, numCPUProc, alpha):
                         # process was preempted
                         PM.activeProcess.numPreemptions += 1
                         PM.activeProcess.status = Status.READY
-                        heapq.heappush(PM.readyQueue, (PM.activeProcess.tau, PM.activeProcess))
-                        
+                        # heapq.heappush(PM.readyQueue, (PM.activeProcess.tau, PM.activeProcess))
+                        PM.readyQueue.append((math.ceil(alpha * PM.activeProcess.OGBurstTimes[PM.activeProcess.turnaroundIndex][0] + (1-alpha) * PM.activeProcess.tau), PM.activeProcess))
+                        PM.readyQueue.sort(key= lambda x: (x[0], x[1].id))
+
                     if len(PM.readyQueue) != 0:
                         PM.activeProcess = PM.readyQueue[0][1]
 
@@ -595,14 +603,19 @@ def ShortestRemainingTime(processes, contextSwitchTime, numCPUProc, alpha):
                                 " completed I/O; added to ready queue ", end="", sep='')
                             print("[Q " + p.id + "]", sep='')
                     else:
-                        if p.tau < PM.activeProcess.tau - (PM.activeProcess.OGBurstTimes[PM.activeProcess.turnaroundIndex][0] - PM.activeProcess.burstTimes[0][0]):
+                        if p.tau < PM.activeProcess.tau - (time - PM.activeProcess.emplacedTime):
                             # preempt
                             p.status = Status.READY
                             # insert with 0 key value to guarantee p will be front of the queue
                             pTuple = (0, p)
 
-                            heapq.heappush(PM.readyQueue, pTuple)
+                            # heapq.heappush(PM.readyQueue, pTuple)
+                            PM.readyQueue.append(pTuple)
+                            
                             PM.activeProcess.burstTimes[0][0] += 1
+                            
+
+                            PM.readyQueue.sort(key = lambda x: (x[0], x[1].id))
                             PM.activeProcess.status = Status.SWITCHING_OUT
                             PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
                             if time < 10000:
@@ -611,7 +624,9 @@ def ShortestRemainingTime(processes, contextSwitchTime, numCPUProc, alpha):
                         else:
                             p.status = Status.READY
                             pTuple = (p.tau, p)
-                            heapq.heappush(PM.readyQueue, pTuple)
+                            # heapq.heappush(PM.readyQueue, pTuple)
+                            PM.readyQueue.append(pTuple)
+                            PM.readyQueue.sort(key = lambda x: (x[0], x[1].id))
                             # time 3318ms: Process C completed I/O; added to ready queue [Q B C]
                             if time < 10000:
                                 print("time ", time, "ms: Process " + p.id +
@@ -632,7 +647,9 @@ def ShortestRemainingTime(processes, contextSwitchTime, numCPUProc, alpha):
         for p in PM.generatedProcesses:
             if p.arrivalTime <= time and p.status == Status.UNARRIVED:
                 pTuple = (p.tau, p)
-                heapq.heappush(PM.readyQueue, pTuple)
+                # heapq.heappush(PM.readyQueue, pTuple)
+                PM.readyQueue.append(pTuple)
+                PM.readyQueue.sort(key= lambda x: (x[0], x[1].id))
                 if time < 10000:
                     print("time ", time, "ms: Process " + p.id +
                           " (tau ", p.tau, "ms) arrived; added to ready queue [Q ", " ".join(x[1].id for x in PM.readyQueue), "]", sep='')
@@ -755,7 +772,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
 
         if PM.activeProcess.status == Status.RUNNING:
             PM.activeProcess.timeRunning += 1
-            if PM.activeProcess.timeRunning > timeLimit:
+            if PM.activeProcess.timeRunning > timeLimit and PM.activeProcess.burstTimes[0][0] != 0:
                 if len(PM.readyQueue) != 0:
                     # preempt
                     if time < 10000:
