@@ -24,6 +24,9 @@ class Rand48:
 
 randomizer = Rand48()
 
+def round(num):
+    return math.ceil(num * 1000) / 1000
+
 class Status(Enum):
     UNARRIVED = -1
     READY = 0
@@ -253,7 +256,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
 
     print("Algorithm FCFS", file=fp)
     print("-- CPU utililization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
-    print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(PM.avgCPUBurst, PM.avgCPUProcBurst, PM.avgIOProcBurst), file=fp)
+    print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(round(PM.avgCPUBurst), round(PM.avgCPUProcBurst), round(PM.avgIOProcBurst)), file=fp)
 
     print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format( sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses),
                                                                           sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if p.isCPUBound else 0 for p in PM.generatedProcesses),
@@ -422,9 +425,9 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
     print("-- CPU utililization: {:.3f}%".format(PM.busyTime / time * 100), file=fp)
     print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(PM.avgCPUBurst, PM.avgCPUProcBurst, PM.avgIOProcBurst), file=fp)
 
-    print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format( sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses),
-                                                                          sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if p.isCPUBound else 0 for p in PM.generatedProcesses),
-                                                                          sum(p.waitTime if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format( round(sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses)),
+                                                                          round(sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if p.isCPUBound else 0 for p in PM.generatedProcesses)),
+                                                                          round(sum(p.waitTime if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if not p.isCPUBound else 0 for p in PM.generatedProcesses))), file=fp)
     print("-- average turnaround time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(sum(sum(p.turnaroundTime) for p in PM.generatedProcesses) / sum(p.numBursts for p in PM.generatedProcesses),
                                                                             sum(sum(p.turnaroundTime) if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(p.numBursts if p.isCPUBound else 0 for p in PM.generatedProcesses),
                                                                             sum(sum(p.turnaroundTime) if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(p.numBursts if not p.isCPUBound else 0  for p in PM.generatedProcesses)), file=fp)
