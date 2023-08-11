@@ -1,5 +1,4 @@
 import math
-import random
 import sys
 from copy import deepcopy
 from typing import List, Tuple
@@ -101,10 +100,25 @@ class manager:
                 IOBound / sum(p.numBursts if not p.isCPUBound else 0 for p in self.generatedProcesses))
 
     def printQueue(self):
+
+
         if len(self.readyQueue) != 0:
             print("[Q " + " ".join(x[1].id for x in self.readyQueue) + "]", sep='')
         else:
             print("[Q <empty>]")
+    
+    def printShort(self):
+        temp = [x[1] for x in self.readyQueue]
+        temp.sort(key=lambda x: (x.tau, x.id))
+        if len(self.readyQueue) != 0:
+            print("[Q " + " ".join(x.id for x in temp) + "]", sep='')
+        else:
+            print("[Q <empty>]")
+
+
+
+
+    
 
 
 # sum(sum(p.turnaroundTime) for p in PM.generatedProcesses) / sum(p.numBursts for p in PM.generatedProcesses),
@@ -132,7 +146,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
             if PM.activeProcess.switchingTimer == 0:
                 PM.activeProcess.status = Status.RUNNING
                 # time 28ms: Process C started using the CPU for 2920ms burst [Q <empty>]
-                if time < 10000000:
+                if time < 10000:
                     print("time ", time, "ms: Process "+PM.activeProcess.id + " started using the CPU for ",
                           PM.activeProcess.burstTimes[0][0], "ms burst ", end="", sep='')
 
@@ -150,6 +164,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
                     if len(PM.readyQueue) != 0:
                         PM.activeProcess = PM.readyQueue[0][1]
                         PM.readyQueue.pop(0)
+
                         PM.activeProcess.turnaroundTime.append(time)
 
                         PM.activeProcess.numContextSwitches += 1
@@ -164,6 +179,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
         if (PM.activeProcess.status == Status.WAITING or PM.activeProcess.status == Status.READY or PM.activeProcess.status == Status.TERMINATED) and len(PM.readyQueue) != 0:
             PM.activeProcess = PM.readyQueue[0][1]
             PM.readyQueue.pop(0)
+
             if not PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex]:
                 PM.activeProcess.turnaroundTime.append(time)
 
@@ -179,7 +195,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
                     print("time ", time, "ms: Process ",
                           PM.activeProcess.id, " terminated ", sep="", end="")
                     PM.printQueue()
-                elif time < 10000000:
+                elif time < 10000:
                     if len(PM.activeProcess.burstTimes)-1 != 1:
                         print("time ", time, "ms: Process "+PM.activeProcess.id + " completed a CPU burst; ",
                               len(PM.activeProcess.burstTimes)-1, " bursts to go ", end="", sep='')
@@ -213,14 +229,15 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
                         PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
                         p.status = Status.SWITCHING_IN
                         p.switchingTimer = contextSwitchTime / 2 - 1
-                        print("time ", time, "ms: Process " + p.id +
-                              " completed I/O; added to ready queue ", end="", sep='')
-                        print("[Q " + p.id + "]", sep='')
+                        if time < 10000:
+                            print("time ", time, "ms: Process " + p.id +
+                                " completed I/O; added to ready queue ", end="", sep='')
+                            print("[Q " + p.id + "]", sep='')
                     else:
                         p.status = Status.READY
                         heapq.heappush(PM.readyQueue, (time, p))
                         # time 3318ms: Process C completed I/O; added to ready queue [Q B C]
-                        if time < 10000000:
+                        if time < 10000:
                             print("time ", time, "ms: Process " + p.id +
                                   " completed I/O; added to ready queue ", end="", sep='')
                             PM.printQueue()
@@ -239,7 +256,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
         for p in PM.generatedProcesses:
             if p.arrivalTime <= time and p.status == Status.UNARRIVED:
                 heapq.heappush(PM.readyQueue, (time, p))
-                if time < 10000000:
+                if time < 10000:
                     print("time ", time, "ms: Process " + p.id +
                           " arrived; added to ready queue ", end="", sep='')
                     PM.printQueue()
@@ -285,6 +302,7 @@ def FirstComeFirstServe(processes, contextSwitchTime, numCPUProc):
                                                               p.numPreemptions if p.isCPUBound else 0 for p in PM.generatedProcesses),
                                                           sum(p.numPreemptions if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
     print("", file=fp)
+    print()
     fp.close()
 
 
@@ -307,11 +325,11 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
             if PM.activeProcess.switchingTimer == 0:
                 PM.activeProcess.status = Status.RUNNING
                 # time 28ms: Process C started using the CPU for 2920ms burst [Q <empty>]
-                if time < 10000000:
+                if time < 10000:
                     print("time ", time, "ms: Process "+PM.activeProcess.id + " (tau ", PM.activeProcess.tau, "ms) started using the CPU for ",
                           PM.activeProcess.burstTimes[0][0], "ms burst ", end="", sep='')
 
-                    PM.printQueue()
+                    PM.printShort()
             else:
                 PM.activeProcess.switchingTimer -= 1
 
@@ -348,24 +366,24 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
                 if len(PM.activeProcess.burstTimes) == 1:
                     print("time ", time, "ms: Process ",
                           PM.activeProcess.id, " terminated ", sep="", end="")
-                    PM.printQueue()
-                elif time < 10000000:
+                    PM.printShort()
+                elif time < 10000:
                     print("time ", time, "ms: Process "+PM.activeProcess.id + " (tau ", PM.activeProcess.tau, "ms) completed a CPU burst; ",
                           len(PM.activeProcess.burstTimes)-1, " burst", 's' if len(PM.activeProcess.burstTimes)-1 != 1 else '', " to go ", end="", sep='')
-                    PM.printQueue()
+                    PM.printShort()
 
                 oldTau = PM.activeProcess.tau
                 PM.activeProcess.recalcTau(alpha)
 
-                if time < 10000000 and len(PM.activeProcess.burstTimes) != 1:
+                if time < 10000 and len(PM.activeProcess.burstTimes) != 1:
                     # time 9056ms: Recalculating tau for process C: old tau 2440ms ==> new tau 2356ms [Q B]
                     print("time {}ms: Recalculating tau for process {}: old tau {}ms ==> new tau {}ms ".format(
                         time, PM.activeProcess.id, oldTau, PM.activeProcess.tau), end="")
 
-                    PM.printQueue()
+                    PM.printShort()
                     print("time ", time, "ms: Process " + PM.activeProcess.id + " switching out of CPU; blocking on I/O until time ",
                           (time + PM.activeProcess.burstTimes[0][1] + contextSwitchTime // 2), "ms ", end="", sep='')
-                    PM.printQueue()
+                    PM.printShort()
 
                 if len(PM.activeProcess.burstTimes) != 1:
                     PM.activeProcess.turnaroundIndex += 1
@@ -386,18 +404,20 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
                         PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
                         p.status = Status.SWITCHING_IN
                         p.switchingTimer = contextSwitchTime / 2 - 1
-                        print("time ", time, "ms: Process ", p.id, " (tau ", p.tau, "ms)",
-                              " completed I/O; added to ready queue ", end="", sep='')
-                        print("[Q " + p.id + "]", sep='')
+                        if time < 10000:
+                            print("time ", time, "ms: Process ", p.id, " (tau ", p.tau, "ms)",
+                                " completed I/O; added to ready queue ", end="", sep='')
+                            print("[Q " + p.id + "]", sep='')
                     else:
                         p.status = Status.READY
                         pTuple = (p.tau, p)
                         heapq.heappush(PM.readyQueue, pTuple)
+                        
                         # time 3318ms: Process C completed I/O; added to ready queue [Q B C]
-                        if time < 10000000:
+                        if time < 10000:
                             print("time ", time, "ms: Process " + p.id +
                                   " (tau ", p.tau, "ms) completed I/O; added to ready queue ", end="", sep='')
-                            PM.printQueue()
+                            PM.printShort()
                 else:
                     p.burstTimes[0][1] -= 1
 
@@ -414,7 +434,7 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
             if p.arrivalTime <= time and p.status == Status.UNARRIVED:
                 pTuple = (p.tau, p)
                 heapq.heappush(PM.readyQueue, pTuple)
-                if time < 10000000:
+                if time < 10000:
                     print("time ", time, "ms: Process " + p.id +
                           " (tau ", p.tau, "ms) arrived; added to ready queue [Q ", " ".join(x[1].id for x in PM.readyQueue), "]", sep='')
                 p.status = Status.READY
@@ -462,6 +482,204 @@ def ShortestJobFirst(processes, contextSwitchTime, numCPUProc, alpha):
     print("", file=fp)
     fp.close()
 
+def ShortestRemainingTime(processes, contextSwitchTime, numCPUProc, alpha):
+    print("time 0ms: Simulator started for SRT [Q <empty>]")
+    PM = manager(processes, numCPUProc)
+    PM.activeProcess.numContextSwitches += 1
+    PM.activeProcess.reachedCPU[0] = True
+    PM.activeProcess.status = Status.SWITCHING_IN
+    PM.activeProcess.switchingTimer = contextSwitchTime / 2
+
+    time = PM.activeProcess.arrivalTime
+    print("time ", time, "ms: Process " + PM.activeProcess.id +
+          " (tau ", PM.activeProcess.tau, "ms) arrived; added to ready queue [Q "+PM.activeProcess.id+"]", sep='')
+    done = False
+    while (not done):
+
+        # Updated running process
+        if PM.activeProcess.status == Status.SWITCHING_IN:
+            if PM.activeProcess.switchingTimer == 0:
+                PM.activeProcess.status = Status.RUNNING
+                # time 28ms: Process C started using the CPU for 2920ms burst [Q <empty>]
+                if time < 10000:
+                    if (PM.activeProcess.burstTimes[0][0] != PM.activeProcess.OGBurstTimes[PM.activeProcess.turnaroundIndex][0]):
+                        print("time ", time, "ms: Process "+PM.activeProcess.id + " (tau ", PM.activeProcess.tau, "ms) started using the CPU for remaining ",
+                          PM.activeProcess.burstTimes[0][0],"ms of {}ms burst ".format(PM.activeProcess.OGBurstTimes[PM.activeProcess.turnaroundIndex][0]), end="", sep='')
+                    else:    
+                        print("time ", time, "ms: Process "+PM.activeProcess.id + " (tau ", PM.activeProcess.tau, "ms) started using the CPU for ",
+                          PM.activeProcess.burstTimes[0][0], "ms burst ", end="", sep='')
+
+                    PM.printShort()
+            else:
+                PM.activeProcess.switchingTimer -= 1
+
+        elif PM.activeProcess.status == Status.SWITCHING_OUT:
+            if PM.activeProcess.switchingTimer == 0:
+
+                if (PM.activeProcess.burstTimes[0][1] == 0):
+                    PM.activeProcess.status = Status.TERMINATED
+                else:
+                    if PM.activeProcess.burstTimes[0][0] == 0:
+                        PM.activeProcess.status = Status.WAITING
+                    else:
+                        # process was preempted
+                        PM.activeProcess.numPreemptions += 1
+                        PM.activeProcess.status = Status.READY
+                        heapq.heappush(PM.readyQueue, (PM.activeProcess.tau, PM.activeProcess))
+                        
+                    if len(PM.readyQueue) != 0:
+                        PM.activeProcess = PM.readyQueue[0][1]
+
+                        PM.readyQueue.pop(0)
+                        PM.activeProcess.numContextSwitches += 1
+                        PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
+                        PM.activeProcess.status = Status.SWITCHING_IN
+                        PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
+            else:
+                PM.activeProcess.switchingTimer -= 1
+
+        if (PM.activeProcess.status == Status.WAITING or PM.activeProcess.status == Status.READY or PM.activeProcess.status == Status.TERMINATED) and len(PM.readyQueue) != 0:
+            PM.activeProcess = PM.readyQueue[0][1]
+            PM.readyQueue.pop(0)
+            PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
+            PM.activeProcess.numContextSwitches += 1
+            PM.activeProcess.status = Status.SWITCHING_IN
+            PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
+
+        if PM.activeProcess.status == Status.RUNNING:
+            if PM.activeProcess.burstTimes[0][0] == 0:
+
+                if len(PM.activeProcess.burstTimes) == 1:
+                    print("time ", time, "ms: Process ",
+                          PM.activeProcess.id, " terminated ", sep="", end="")
+                    PM.printShort()
+                elif time < 10000:
+                    print("time ", time, "ms: Process "+PM.activeProcess.id + " (tau ", PM.activeProcess.tau, "ms) completed a CPU burst; ",
+                          len(PM.activeProcess.burstTimes)-1, " burst", 's' if len(PM.activeProcess.burstTimes)-1 != 1 else '', " to go ", end="", sep='')
+                    PM.printShort()
+
+                oldTau = PM.activeProcess.tau
+                PM.activeProcess.recalcTau(alpha)
+
+                if time < 10000 and len(PM.activeProcess.burstTimes) != 1:
+                    # time 9056ms: Recalculating tau for process C: old tau 2440ms ==> new tau 2356ms [Q B]
+                    print("time {}ms: Recalculating tau for process {}: old tau {}ms ==> new tau {}ms ".format(
+                        time, PM.activeProcess.id, oldTau, PM.activeProcess.tau), end="")
+
+                    PM.printShort()
+                    print("time ", time, "ms: Process " + PM.activeProcess.id + " switching out of CPU; blocking on I/O until time ",
+                          (time + PM.activeProcess.burstTimes[0][1] + contextSwitchTime // 2), "ms ", end="", sep='')
+                    PM.printShort()
+
+                if len(PM.activeProcess.burstTimes) != 1:
+                    PM.activeProcess.turnaroundIndex += 1
+
+                PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
+                PM.activeProcess.status = Status.SWITCHING_OUT
+            else:
+                PM.activeProcess.burstTimes[0][0] -= 1
+
+        # check for IO burst completions
+        for p in PM.generatedProcesses:
+            if p.status == Status.WAITING:
+                if p.burstTimes[0][1] == 0:
+                    p.burstTimes.pop(0)
+                    if len(PM.readyQueue) == 0 and PM.activeProcess.status != Status.RUNNING:
+                        PM.activeProcess = p
+                        PM.activeProcess.numContextSwitches += 1
+                        PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
+                        p.status = Status.SWITCHING_IN
+                        p.switchingTimer = contextSwitchTime / 2 - 1
+                        if time < 10000:
+                            print("time ", time, "ms: Process ", p.id, " (tau ", p.tau, "ms)",
+                                " completed I/O; added to ready queue ", end="", sep='')
+                            print("[Q " + p.id + "]", sep='')
+                    else:
+                        if p.tau < PM.activeProcess.tau - (PM.activeProcess.OGBurstTimes[PM.activeProcess.turnaroundIndex][0] - PM.activeProcess.burstTimes[0][0]):
+                            # preempt
+                            p.status = Status.READY
+                            # insert with 0 key value to guarantee p will be front of the queue
+                            pTuple = (0, p)
+
+                            heapq.heappush(PM.readyQueue, pTuple)
+                            PM.activeProcess.burstTimes[0][0] += 1
+                            PM.activeProcess.status = Status.SWITCHING_OUT
+                            PM.activeProcess.switchingTimer = contextSwitchTime / 2 - 1
+                            if time < 10000:
+                                print("time {}ms: Process {} (tau {}ms) completed I/O; preempting {} ".format(time, p.id, p.tau, PM.activeProcess.id), end='')
+                                PM.printShort()
+                        else:
+                            p.status = Status.READY
+                            pTuple = (p.tau, p)
+                            heapq.heappush(PM.readyQueue, pTuple)
+                            # time 3318ms: Process C completed I/O; added to ready queue [Q B C]
+                            if time < 10000:
+                                print("time ", time, "ms: Process " + p.id +
+                                    " (tau ", p.tau, "ms) completed I/O; added to ready queue ", end="", sep='')
+                                PM.printShort()
+                else:
+                    p.burstTimes[0][1] -= 1
+
+        # Checks if new processes have arrived
+        for p in PM.generatedProcesses:
+            if p.status == Status.RUNNING:
+                PM.busyTime += 1
+            if p.status == Status.READY:
+                p.waitTime += 1
+            if p.status == Status.SWITCHING_IN or p.status == Status.SWITCHING_OUT or p.status == Status.RUNNING or p.status == Status.WAITING:
+                p.turnaroundTime[p.turnaroundIndex] += 1
+
+        for p in PM.generatedProcesses:
+            if p.arrivalTime <= time and p.status == Status.UNARRIVED:
+                pTuple = (p.tau, p)
+                heapq.heappush(PM.readyQueue, pTuple)
+                if time < 10000:
+                    print("time ", time, "ms: Process " + p.id +
+                          " (tau ", p.tau, "ms) arrived; added to ready queue [Q ", " ".join(x[1].id for x in PM.readyQueue), "]", sep='')
+                p.status = Status.READY
+        done = True
+        for p in PM.generatedProcesses:
+            if p.status != Status.TERMINATED:
+                done = False
+
+        time += 1 if not done else 0
+    # time 324063ms: Simulator ended for FCFS [Q <empty>]
+    print("time ", time, "ms: Simulator ended for SRT [Q <empty>]\n", sep="")
+    fn = "simout.txt"
+    fp = open(fn, "a")
+#     Algorithm FCFS
+# -- CPU utilization: 84.253%
+# -- average CPU burst time: 3067.776 ms (4071.000 ms/992.138 ms)
+# -- average wait time: 779.663 ms (217.284 ms/1943.207 ms)
+# -- average turnaround time: 3851.439 ms (4292.284 ms/2939.345 ms)
+# -- number of context switches: 89 (60/29)
+# -- number of preemptions: 0 (0/0)
+# TODO: First number in parenthesis is for CPU-bound processes, the second is for IO-bound processes
+
+    print("Algorithm SRT", file=fp)
+    print(
+        "-- CPU utilization: {:.3f}%".format(round(PM.busyTime / time * 100)), file=fp)
+    print("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(
+        round(PM.avgCPUBurst), round(PM.avgCPUProcBurst), round(PM.avgIOProcBurst)), file=fp)
+
+    print("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(round(sum(p.waitTime for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 for p in PM.generatedProcesses)),
+                                                                         round(sum(p.waitTime if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(
+                                                                              (p.numBursts+1)/2 if p.isCPUBound else 0 for p in PM.generatedProcesses)),
+                                                                         round(sum(p.waitTime if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum((p.numBursts+1)/2 if not p.isCPUBound else 0 for p in PM.generatedProcesses))), file=fp)
+    print("-- average turnaround time: {:.3f} ms ({:.3f} ms/{:.3f} ms)".format(sum(sum(p.turnaroundTime) for p in PM.generatedProcesses) / sum(p.numBursts for p in PM.generatedProcesses),
+                                                                               sum(sum(p.turnaroundTime) if p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(
+                                                                                   p.numBursts if p.isCPUBound else 0 for p in PM.generatedProcesses),
+                                                                               sum(sum(p.turnaroundTime) if not p.isCPUBound else 0 for p in PM.generatedProcesses) / sum(p.numBursts if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("-- number of context switches: {:d} ({:d}/{:d})".format(sum(p.numContextSwitches for p in PM.generatedProcesses),
+                                                                   sum(
+                                                                       p.numContextSwitches if p.isCPUBound else 0 for p in PM.generatedProcesses),
+                                                                   sum(p.numContextSwitches if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("-- number of preemptions: {:d} ({}/{})".format(sum(p.numPreemptions for p in PM.generatedProcesses),
+                                                          sum(
+                                                              p.numPreemptions if p.isCPUBound else 0 for p in PM.generatedProcesses),
+                                                          sum(p.numPreemptions if not p.isCPUBound else 0 for p in PM.generatedProcesses)), file=fp)
+    print("", file=fp)
+    fp.close() 
 
 def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
     print("time 0ms: Simulator started for RR [Q <empty>]")
@@ -486,7 +704,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
                 PM.activeProcess.status = Status.RUNNING
 
                 # time 28ms: Process C started using the CPU for 2920ms burst [Q <empty>]
-                if time < 10000000:
+                if time < 10000:
                     if (PM.activeProcess.burstTimes[0][0] == PM.activeProcess.OGBurstTimes[0][0]):
                         print("time ", time, "ms: Process "+PM.activeProcess.id + " started using the CPU for ",
                               PM.activeProcess.burstTimes[0][0], "ms burst ", end="", sep='')
@@ -526,6 +744,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
         if (PM.activeProcess.status == Status.WAITING or PM.activeProcess.status == Status.READY or PM.activeProcess.status == Status.TERMINATED) and len(PM.readyQueue) != 0:
             PM.activeProcess = PM.readyQueue[0][1]
             PM.readyQueue.pop(0)
+
             if not PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex]:
                 PM.activeProcess.turnaroundTime.append(time)
 
@@ -539,7 +758,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
             if PM.activeProcess.timeRunning > timeLimit:
                 if len(PM.readyQueue) != 0:
                     # preempt
-                    if time < 10000000:
+                    if time < 10000:
                         print("time ", time, "ms: Time slice expired; preempting process ", PM.activeProcess.id,
                               " with ", PM.activeProcess.burstTimes[0][0], "ms remaining ", sep="", end="")
                         PM.printQueue()
@@ -547,7 +766,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
                     PM.activeProcess.status = Status.SWITCHING_OUT
                     PM.activeProcess.numPreemptions += 1
                 else:
-                    if time < 10000000:
+                    if time < 10000:
                         print(
                             "time ", time, "ms: Time slice expired; no preemption because ready queue is empty [Q <empty>]", sep="")
                     PM.activeProcess.timeRunning = 1
@@ -558,7 +777,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
                     print("time ", time, "ms: Process ",
                           PM.activeProcess.id, " terminated ", sep="", end="")
                     PM.printQueue()
-                elif time < 10000000:
+                elif time < 10000:
                     if len(PM.activeProcess.burstTimes)-1 != 1:
                         print("time ", time, "ms: Process "+PM.activeProcess.id + " completed a CPU burst; ",
                               len(PM.activeProcess.burstTimes)-1, " bursts to go ", end="", sep='')
@@ -593,7 +812,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
                         PM.activeProcess.reachedCPU[PM.activeProcess.turnaroundIndex] = True
                         p.status = Status.SWITCHING_IN
                         p.switchingTimer = contextSwitchTime / 2 - 1
-                        if time < 10000000:
+                        if time < 10000:
                             print("time ", time, "ms: Process " + p.id +
                                   " completed I/O; added to ready queue ", end="", sep='')
                             print("[Q " + p.id + "]", sep='')
@@ -601,7 +820,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
                         p.status = Status.READY
                         heapq.heappush(PM.readyQueue, (time, p))
                     # time 3318ms: Process C completed I/O; added to ready queue [Q B C]
-                        if time < 10000000:
+                        if time < 10000:
                             print("time ", time, "ms: Process " + p.id +
                                   " completed I/O; added to ready queue ", end="", sep='')
                             PM.printQueue()
@@ -620,7 +839,7 @@ def RoundRobin(processes, contextSwitchTime, numCPUProc, timeLimit):
         for p in PM.generatedProcesses:
             if p.arrivalTime <= time and p.status == Status.UNARRIVED:
                 heapq.heappush(PM.readyQueue, (time, p))
-                if time < 10000000:
+                if time < 10000:
                     print("time ", time, "ms: Process " + p.id +
                           " arrived; added to ready queue ", end="", sep='')
                     PM.printQueue()
@@ -738,10 +957,11 @@ def main(argv):
 
     # <<< PROJECT PART II -- t_cs=4ms; alpha=0.75; t_slice=256ms >>>
     print("<<< PROJECT PART II -- t_cs=", contextSwitchTime,
-          "ms; alpha=", alpha, "; t_slice=", timeSlice, "ms >>>", sep="")
+          "ms; alpha={:.2f}".format(alpha), "; t_slice=", timeSlice, "ms >>>", sep="")
     processes.sort(key=lambda Process: Process.arrivalTime)
     FirstComeFirstServe(deepcopy(processes), contextSwitchTime, numCPUProc)
     ShortestJobFirst(deepcopy(processes), contextSwitchTime, numCPUProc, alpha)
+    ShortestRemainingTime(deepcopy(processes), contextSwitchTime, numCPUProc, alpha)
     RoundRobin(deepcopy(processes), contextSwitchTime, numCPUProc, timeSlice)
 
     return 0
