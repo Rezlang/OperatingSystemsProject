@@ -2,9 +2,9 @@ from rand import Rand48
 import math
 from process import Process
 
-
 class Generator(object):
     def __init__(self, lambda_: int, upperBound: int, seed: int):
+        # Initialize the generator with the given parameters
         self.lambda_ = lambda_
         self.randomizer = Rand48()
         self.randomizer.srand(seed)
@@ -12,8 +12,8 @@ class Generator(object):
 
     def next_exp(self) -> float:
         """
-        exponential distribution as a function of random variable r
-        if next_exp > self.ubound, we continue generating numbers until we find one <= self.ubound
+        Generates the next value from an exponential distribution.
+        If the generated value is greater than the upper bound, new values are generated until a valid one is found.
         """
         num = self.upperBound
         while num > self.upperBound - 1:
@@ -22,18 +22,26 @@ class Generator(object):
 
     def next_process(self, isIOBound: bool, id: str):
         """
-        @returns a new Process P with an initial arrival time and a number of cpu bursts, each of which
-                    has the same burst time. All io wait times for the process also have the same value.
+        Generates a new process with specified arrival time, number of CPU bursts, and intervals between bursts.
         """
+        # Generate the arrival time based on an exponential distribution
         arrivalTime = math.ceil(self.next_exp()) - 1
+        
+        # Generate the number of CPU bursts
         numCPUBursts = math.ceil(64 * self.randomizer.drand())
+        
         intervals = []
         for _ in range(numCPUBursts - 1):
+            # Generate burst and I/O wait times based on exponential distributions
             burstTime = math.ceil(self.next_exp())
             ioBurstTime = math.ceil(self.next_exp()) * 10
+            
             if not isIOBound:
+                # Adjust burst and I/O times for CPU-bound processes
                 burstTime *= 4
                 ioBurstTime //= 8
+                
+            # Append burst and I/O times to the intervals list
             intervals.append(burstTime)
             intervals.append(ioBurstTime)
 
@@ -42,4 +50,5 @@ class Generator(object):
             burstTime *= 4
         intervals.append(burstTime)
 
+        # Return a new Process object with generated attributes
         return Process(arrivalTime, numCPUBursts, intervals, isIOBound, id)
