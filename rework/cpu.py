@@ -1,799 +1,816 @@
 from process import Process
 from heapq import *
-
+import math
 
 class CPU:
-    def __init__(self, context_switch_time: int, lamda: float, alpha: float):
-        self.__tcs__ = context_switch_time
-        self.__arrivalqueue__ = []
-        self.lamda = lamda
-        self.alpha = alpha
-        self.time = 0
-        self.time_in_cpu = 0
-        self.state = {}
+    def __init__(self, timeCS: int, lambda_: float, alpha: float):
+        self.__tcs__: int = timeCS
+        self.unarrived: list = []
+        self.lambda_: float = lambda_
+        self.alpha: float = alpha
+        self.time: int = 0
+        self.busyTime: int = 0
+        self.status = {}
         # Stores ready time, entry time, and exit time for each process
-        self.preemption = 0
+        self.preemption:int = 0
         self.simout = open("simout.txt", "w")
 
-    def dec_ceil(self, num, places):
-        s = str(num)
-        rounded_s = str(round(num, places))
-        # If the last digit of rounded_s is the same, then we did not round up
-        if s[len(rounded_s) - 1] == rounded_s[-1]:
-            return round(num, places) + 1 / (10 ** places)
-        else:
-            return round(num, places)
+    def roundStats(self, num, places):
+        return math.ceil(num * 1000) / 1000
 
-    def __savestats__(self, algo):
+    def writeStats(self, algo):
         self.simout.write("Algorithm {}\n".format(algo))
         # CPU Utilization
-        self.simout.write("-- CPU Utilization: {:.3f}%\n".format(self.dec_ceil(100 * self.time_in_cpu / self.time, 3)))
+        self.simout.write("-- CPU utilization: {:.3f}%\n".format(self.roundStats(100 * self.busyTime / self.time, 3)))
         # Average cpu burst time stats
-        total_cpu_bound_burst_time = 0
-        total_io_bound_burst_time = 0
-        total_bursts_cpu = 0
-        total_bursts_io = 0
-        total_cpu_burst_time = 0
-        total_bursts = 0
+        cpuBoundBurstTime = 0
+        ioBoundBurstTime = 0
+        numCPUBursts = 0
+        numIOBursts = 0
+        CPUBurstTime = 0
+        numBursts = 0
         # Wait time stats
-        wait_time_cpu_bound = 0
-        wait_time_io_bound = 0
-        turnaround_time_cpu = 0
-        turnaround_time_io = 0
-        cpu_bound_processes = 0
-        context_switches_cpu = 0
-        context_switches_io = 0
-        preemptions_cpu = 0
-        preemptions_io = 0
-        for p in self.state:
-            for i in range(len(self.state[p])):
-                if p.io_bound:
-                    total_io_bound_burst_time += sum(self.state[p][i]["EXIT"]) - sum(self.state[p][i]["ENTRY"])
-                    wait_time_io_bound += sum(self.state[p][i]["ENTRY"]) - sum(self.state[p][i]["READY"]) - 2 * (
-                        len(self.state[p][i]["ENTRY"]))
-                    assert (len(self.state[p][i]["ENTRY"]) == len(self.state[p][i]["READY"]))
-                    context_switches_io += len(self.state[p][i]["EXIT"])
-                    turnaround_time_io += self.state[p][i]["EXIT"][-1] - self.state[p][i]["READY"][0] + 2
-                    if i != len(self.state[p]) - 1:
-                        preemptions_io += len(self.state[p][i]["EXIT"]) - 1
+        cpuBoundWaitTime = 0
+        ioBoundWaitTime = 0
+        cpuBoundTurnaroundTime = 0
+        ioBoundTurnaroundTime = 0
+        numCPUProc = 0
+        cpuBoundCS = 0
+        ioBoundCS = 0
+        cpuBoundPreemption = 0
+        ioBoundPreemption = 0
+
+        p: Process
+        for p in self.status:
+            for i in range(len(self.status[p])):
+                if p.isIOBound:
+                    ioBoundBurstTime += sum(self.status[p][i]["EXIT"]) - sum(self.status[p][i]["ENTRY"])
+                    ioBoundWaitTime += sum(self.status[p][i]["ENTRY"]) - sum(self.status[p][i]["READY"]) - 2 * (
+                        len(self.status[p][i]["ENTRY"]))
+                    assert (len(self.status[p][i]["ENTRY"]) == len(self.status[p][i]["READY"]))
+                    ioBoundCS += len(self.status[p][i]["EXIT"])
+                    ioBoundTurnaroundTime += self.status[p][i]["EXIT"][-1] - self.status[p][i]["READY"][0] + 2
+                    if i != len(self.status[p]) - 1:
+                        ioBoundPreemption += len(self.status[p][i]["EXIT"]) - 1
 
                 else:
-                    total_cpu_bound_burst_time += sum(self.state[p][i]["EXIT"]) - sum(self.state[p][i]["ENTRY"])
-                    wait_time_cpu_bound += sum(self.state[p][i]["ENTRY"]) - sum(self.state[p][i]["READY"]) - 2 * (
-                        len(self.state[p][i]["ENTRY"]))
-                    context_switches_cpu += len(self.state[p][i]["EXIT"])
-                    turnaround_time_cpu += self.state[p][i]["EXIT"][-1] - self.state[p][i]["READY"][0] + 2
-                    if i != len(self.state[p]) - 1:
-                        preemptions_cpu += len(self.state[p][i]["EXIT"]) - 1
+                    cpuBoundBurstTime += sum(self.status[p][i]["EXIT"]) - sum(self.status[p][i]["ENTRY"])
+                    cpuBoundWaitTime += sum(self.status[p][i]["ENTRY"]) - sum(self.status[p][i]["READY"]) - 2 * (
+                        len(self.status[p][i]["ENTRY"]))
+                    cpuBoundCS += len(self.status[p][i]["EXIT"])
+                    cpuBoundTurnaroundTime += self.status[p][i]["EXIT"][-1] - self.status[p][i]["READY"][0] + 2
+                    if i != len(self.status[p]) - 1:
+                        cpuBoundPreemption += len(self.status[p][i]["EXIT"]) - 1
             # Turnaround time (first ready to last exit)
-            if not p.io_bound:
-                cpu_bound_processes += 1
-                total_bursts_cpu += p.cpu_bursts
+            if not p.isIOBound:
+                numCPUProc += 1
+                numCPUBursts += p.numCPUBursts
             else:
-                total_bursts_io += p.cpu_bursts
+                numIOBursts += p.numCPUBursts
 
-        total_cpu_burst_time = total_cpu_bound_burst_time + total_io_bound_burst_time
-        total_bursts = total_bursts_cpu + total_bursts_io
-        total_wait_time = wait_time_cpu_bound + wait_time_io_bound
-        total_turnaround_time = turnaround_time_cpu + turnaround_time_io
-        total_context_switches = context_switches_cpu + context_switches_io
-        total_preemptions = preemptions_cpu + preemptions_io
-        self.simout.write("-- average CPU burst time: {:.3f} ms ({:.3f}ms/{:.3f}ms)\n".format(
-            self.dec_ceil(total_cpu_burst_time / total_bursts, 3),
-            self.dec_ceil(total_cpu_bound_burst_time / total_bursts_cpu, 3),
-            self.dec_ceil(total_io_bound_burst_time / total_bursts_io, 3)))
-        self.simout.write("-- average wait time: {:.3f} ms ({:.3f}ms/{:.3f}ms)\n".format(
-            self.dec_ceil(total_wait_time / total_bursts, 3), self.dec_ceil(wait_time_cpu_bound / total_bursts_cpu, 3),
-            self.dec_ceil(wait_time_io_bound / total_bursts_io, 3)))
-        self.simout.write("-- average turnaround time: {:.3f} ms ({:.3f}ms/{:.3f}ms)\n".format(
-            self.dec_ceil(total_turnaround_time / total_bursts, 3),
-            self.dec_ceil(turnaround_time_cpu / total_bursts_cpu, 3),
-            self.dec_ceil(turnaround_time_io / total_bursts_io, 3)))
+        CPUBurstTime = cpuBoundBurstTime + ioBoundBurstTime
+        numBursts = numCPUBursts + numIOBursts
+        waitTime = cpuBoundWaitTime + ioBoundWaitTime
+        turnaroundTime = cpuBoundTurnaroundTime + ioBoundTurnaroundTime
+        numContextSwitches = cpuBoundCS + ioBoundCS
+        numPreemptions = cpuBoundPreemption + ioBoundPreemption
+        self.simout.write("-- average CPU burst time: {:.3f} ms ({:.3f} ms/{:.3f} ms)\n".format(
+            self.roundStats(CPUBurstTime / numBursts, 3),
+            self.roundStats(cpuBoundBurstTime / numCPUBursts, 3),
+            self.roundStats(ioBoundBurstTime / numIOBursts, 3)))
+        self.simout.write("-- average wait time: {:.3f} ms ({:.3f} ms/{:.3f} ms)\n".format(
+            self.roundStats(waitTime / numBursts, 3), self.roundStats(cpuBoundWaitTime / numCPUBursts, 3),
+            self.roundStats(ioBoundWaitTime / numIOBursts, 3)))
+        self.simout.write("-- average turnaround time: {:.3f} ms ({:.3f} ms/{:.3f} ms)\n".format(
+            self.roundStats(turnaroundTime / numBursts, 3),
+            self.roundStats(cpuBoundTurnaroundTime / numCPUBursts, 3),
+            self.roundStats(ioBoundTurnaroundTime / numIOBursts, 3)))
         self.simout.write(
-            "-- number of context switches: {} ({},{})\n".format(total_context_switches, context_switches_cpu,
-                                                                 context_switches_io))
+            "-- number of context switches: {} ({}/{})\n".format(numContextSwitches, cpuBoundCS,
+                                                                 ioBoundCS))
         self.simout.write(
-            "-- number of preemptions: {} ({},{})\n".format(total_preemptions, preemptions_cpu, preemptions_io))
+            "-- number of preemptions: {} ({}/{})\n".format(numPreemptions, cpuBoundPreemption, ioBoundPreemption))
 
-    def __printreadyqueue__(self, rdyq: list):
-        if len(rdyq) == 0:
+    def printQueue(self, q: list):
+        if len(q) == 0:
             return "[Q <empty>]"
-        return "[Q " + " ".join([p[2].pid for p in sorted(rdyq, key=lambda x: (x[2].this_tau(), x[2].pid))]) + "]"
+        return "[Q " + " ".join([p[2].id for p in sorted(q, key=lambda x: (x[2].currentTau(), x[2].id))]) + "]"
 
-    def __printreadyqueueFCFS__(self, rdyq: list):
-        if len(rdyq) == 0:
+    def printFCFS(self, q: list):
+        if len(q) == 0:
             return "[Q <empty>]"
-        return "[Q " + " ".join([p.pid for p in rdyq]) + "]"
+        return "[Q " + " ".join([p.id for p in q]) + "]"
 
-    def round_robin(self, process_list: list, quantum: int):
-        print("time {}ms: Simulator started for RR {}".format(0, self.__printreadyqueue__([])))
-        [p.compute_predicted(self.lamda, self.alpha) for p in process_list]
-        for p in process_list:
-            self.state[p] = []
-            for i in range(p.cpu_bursts):
-                self.state[p].append({})
-                self.state[p][i]["READY"] = []
-                self.state[p][i]["ENTRY"] = []
-                self.state[p][i]["EXIT"] = []
-        arrival_q = sorted(process_list, key=lambda p: (p.arrival_time, p.pid), reverse=True)
-        ready_q = []
-        current_process = None
-        next_quantum = 0
-        while current_process or len(arrival_q) != 0 or len(ready_q) != 0:
+    def roundRobin(self, processes: list, currEventTime: int):
+        print("time {}ms: Simulator started for RR {}".format(0, self.printQueue([])))
+        
+        [p.calcTau(self.lambda_, self.alpha) for p in processes]
+        p: Process
+        for p in processes:
+            self.status[p] = []
+            for i in range(p.numCPUBursts):
+                self.status[p].append({})
+                self.status[p][i]["READY"] = []
+                self.status[p][i]["ENTRY"] = []
+                self.status[p][i]["EXIT"] = []
+        unarrived = sorted(processes, key=lambda p: (p.arrivalTime, p.id), reverse=True)
+        readyQueue = []
+        activeProcess = None
+        nextEventTime = 0
+        while activeProcess or len(unarrived) != 0 or len(readyQueue) != 0:
             # Get next arrivals if at the next arrival time
-            if len(arrival_q) > 0 and self.time == arrival_q[-1].arrival_time:
-                next_arrivals = self.get_next_arrivals(arrival_q)
-                self.time = next_arrivals[0].arrival_time
+            if len(unarrived) > 0 and self.time == unarrived[-1].arrivalTime:
+                incomingProcesses = self.getIncomingProcesses(unarrived)
+                self.time = incomingProcesses[0].arrivalTime
                 # Add all to the ready queue and pre-empt curent process has been in for longer tha the quantum
-                for p in next_arrivals:
-                    ready_q.append(p)
-                    if p.burst_index == 0:
-                        print("time {}ms: Process {} arrived; added to ready queue {}".format(p.arrival_time, p.pid,
-                                                                                              self.__printreadyqueueFCFS__(
-                                                                                                  ready_q))) if self.time <= 9999 else None
+                for p in incomingProcesses:
+                    readyQueue.append(p)
+                    if p.burstIndex == 0:
+                        print("time {}ms: Process {} arrived; added to ready queue {}".format(p.arrivalTime, p.id,
+                                                                                              self.printFCFS(
+                                                                                                  readyQueue))) if self.time <= 9999 else None
                     else:
                         print(
-                            "time {}ms: Process {} completed I/O; added to ready queue {}".format(p.arrival_time, p.pid,
-                                                                                                  self.__printreadyqueueFCFS__(
-                                                                                                      ready_q))) if self.time <= 9999 else None
-                    self.state[p][p.burst_index]["READY"].append(self.time)
+                            "time {}ms: Process {} completed I/O; added to ready queue {}".format(p.arrivalTime, p.id,
+                                                                                                  self.printFCFS(
+                                                                                                      readyQueue))) if self.time <= 9999 else None
+                    self.status[p][p.burstIndex]["READY"].append(self.time)
                     # Go to next arrival time if nothing is in the ready queue and there is no current process
-            if len(ready_q) == 0 and not current_process:
-                next_arrivals = self.get_next_arrivals(arrival_q)
-                self.time = next_arrivals[0].arrival_time
+            if len(readyQueue) == 0 and not activeProcess:
+                incomingProcesses = self.getIncomingProcesses(unarrived)
+                self.time = incomingProcesses[0].arrivalTime
                 # Add all to the ready queue and pre-empt curent process has been in for longer tha the quantum
-                for p in next_arrivals:
-                    ready_q.append(p)
-                    if p.burst_index == 0:
-                        print("time {}ms: Process {} arrived; added to ready queue {}".format(p.arrival_time, p.pid,
-                                                                                              self.__printreadyqueueFCFS__(
-                                                                                                  ready_q))) if self.time <= 9999 else None
+                for p in incomingProcesses:
+                    readyQueue.append(p)
+                    if p.burstIndex == 0:
+                        print("time {}ms: Process {} arrived; added to ready queue {}".format(p.arrivalTime, p.id,
+                                                                                              self.printFCFS(
+                                                                                                  readyQueue))) if self.time <= 9999 else None
                     else:
                         print(
-                            "time {}ms: Process {} completed I/O; added to ready queue {}".format(p.arrival_time, p.pid,
-                                                                                                  self.__printreadyqueueFCFS__(
-                                                                                                      ready_q))) if self.time <= 9999 else None
-                    self.state[p][p.burst_index]["READY"].append(self.time)
+                            "time {}ms: Process {} completed I/O; added to ready queue {}".format(p.arrivalTime, p.id,
+                                                                                                  self.printFCFS(
+                                                                                                      readyQueue))) if self.time <= 9999 else None
+                    self.status[p][p.burstIndex]["READY"].append(self.time)
                     # Context switch in next process
                 self.time += self.__tcs__ // 2
-                current_process = ready_q.pop(0)
-                if current_process.this_burst() == current_process.this_og_burst():
+                activeProcess = readyQueue.pop(0)
+                if activeProcess.currentBurst() == activeProcess.currentOGBurst():
                     print("time {}ms: Process {} started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                 current_process.pid,
-                                                                                                 current_process.this_burst(),
-                                                                                                 self.__printreadyqueueFCFS__(
-                                                                                                     ready_q))) if self.time <= 9999 else None
+                                                                                                 activeProcess.id,
+                                                                                                 activeProcess.currentBurst(),
+                                                                                                 self.printFCFS(
+                                                                                                     readyQueue))) if self.time <= 9999 else None
                 else:
                     print("time {}ms: Process {} started using the CPU for remaining {}ms of {}ms burst {}".format(
-                        self.time, current_process.pid, current_process.this_burst(), current_process.this_og_burst(),
-                        self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
-                self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
-                next_quantum = self.time + quantum
-            elif not current_process:
+                        self.time, activeProcess.id, activeProcess.currentBurst(), activeProcess.currentOGBurst(),
+                        self.printFCFS(readyQueue))) if self.time <= 9999 else None
+                self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
+                nextEventTime = self.time + currEventTime
+            elif not activeProcess:
                 # Context switch in next process
                 self.time += self.__tcs__ // 2
-                current_process = ready_q.pop(0)
-                if current_process.this_burst() == current_process.this_og_burst():
+                activeProcess = readyQueue.pop(0)
+                if activeProcess.currentBurst() == activeProcess.currentOGBurst():
                     print("time {}ms: Process {} started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                 current_process.pid,
-                                                                                                 current_process.this_burst(),
-                                                                                                 self.__printreadyqueueFCFS__(
-                                                                                                     ready_q))) if self.time <= 9999 else None
+                                                                                                 activeProcess.id,
+                                                                                                 activeProcess.currentBurst(),
+                                                                                                 self.printFCFS(
+                                                                                                     readyQueue))) if self.time <= 9999 else None
                 else:
                     print("time {}ms: Process {} started using the CPU for remaining {}ms of {}ms burst {}".format(
-                        self.time, current_process.pid, current_process.this_burst(), current_process.this_og_burst(),
-                        self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
-                self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
-                next_quantum = self.time + quantum
+                        self.time, activeProcess.id, activeProcess.currentBurst(), activeProcess.currentOGBurst(),
+                        self.printFCFS(readyQueue))) if self.time <= 9999 else None
+                self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
+                nextEventTime = self.time + currEventTime
             # Current process cannot be None at this point
-            # Run current process until next quantum or next arrival
-            if len(arrival_q) == 0 or next_quantum <= arrival_q[-1].arrival_time:
-                run_time = next_quantum - self.time
-                self.time = min(next_quantum, self.time + current_process.this_burst())
-                current_process.run(run_time)
+            # run__ current process until next quantum or next arrival
+            if len(unarrived) == 0 or nextEventTime <= unarrived[-1].arrivalTime:
+                busyTime = nextEventTime - self.time
+                self.time = min(nextEventTime, self.time + activeProcess.currentBurst())
+                activeProcess.run__(busyTime)
                 # Check if process will complete before end of next quantum
-                if current_process.this_burst() <= 0:
+                if activeProcess.currentBurst() <= 0:
                     # Process finishes using the CPU and context switches with the next process
-                    io_wait_time = current_process.this_io()
-                    current_process.complete_this_burst()
+                    ioBoundWaitTime = activeProcess.currentIOBurst()
+                    activeProcess.finishBurst()
                     # If this process is not finished, put somewhere in the arrival q
-                    if not current_process.done():
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                    if not activeProcess.finished():
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                         # Indicate that this process has completed its burst
                         print("time {}ms: Process {} completed a CPU burst; {} burst{} to go {}".format(self.time,
-                                                                                                        current_process.pid,
-                                                                                                        current_process.remaining_bursts(),
-                                                                                                        "s" if current_process.remaining_bursts() > 1 else "",
-                                                                                                        self.__printreadyqueueFCFS__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
+                                                                                                        activeProcess.id,
+                                                                                                        activeProcess.burstsRemaining(),
+                                                                                                        "s" if activeProcess.burstsRemaining() > 1 else "",
+                                                                                                        self.printFCFS(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
                         # Context switch out of the cpu
                         print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                            self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                            self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBoundWaitTime,
+                            self.printFCFS(readyQueue))) if self.time <= 9999 else None
                         # Set new arrival time for process
-                        current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                        activeProcess.arrivalTime = self.time + ioBoundWaitTime + self.__tcs__ // 2
                         # Search for new chronological spot in arrival q from end
-                        i = len(arrival_q) - 1
-                        while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                                current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                                arrival_q[i].pid)):
+                        i = len(unarrived) - 1
+                        while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                                activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                                unarrived[i].id)):
                             i -= 1
-                        arrival_q.insert(i + 1, current_process)
+                        unarrived.insert(i + 1, activeProcess)
                     else:
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                        print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                           self.__printreadyqueueFCFS__(ready_q)))
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                        print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                           self.printFCFS(readyQueue)))
                     # Context switch out of CPU
                     self.time += self.__tcs__ // 2
-                    current_process = None
+                    activeProcess = None
                 else:
-                    if len(ready_q) == 0:
+                    if len(readyQueue) == 0:
                         print(
                             'time {}ms: Time slice expired; no preemption because ready queue is empty [Q <empty>]'.format(
                                 self.time)) if self.time <= 9999 else None
                     else:
                         # Pre-empt and put in next process
                         print("time {}ms: Time slice expired; preempting process {} with {}ms remaining {}".format(
-                            self.time, current_process.pid, current_process.this_burst(),
-                            self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
-                        self.state[current_process][current_process.burst_index]["EXIT"].append(self.time)
+                            self.time, activeProcess.id, activeProcess.currentBurst(),
+                            self.printFCFS(readyQueue))) if self.time <= 9999 else None
+                        self.status[activeProcess][activeProcess.burstIndex]["EXIT"].append(self.time)
                         # Context switch out
                         self.time += self.__tcs__ // 2
-                        ready_q.append(current_process)
-                        self.state[current_process][current_process.burst_index]["READY"].append(self.time)
-                        current_process = None
+                        readyQueue.append(activeProcess)
+                        self.status[activeProcess][activeProcess.burstIndex]["READY"].append(self.time)
+                        activeProcess = None
                         # Context switch in the new process
                         self.time += self.__tcs__ // 2
-                        current_process = ready_q.pop(0)
-                        if current_process.this_burst() == current_process.this_og_burst():
+                        activeProcess = readyQueue.pop(0)
+                        if activeProcess.currentBurst() == activeProcess.currentOGBurst():
                             print("time {}ms: Process {} started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                         current_process.pid,
-                                                                                                         current_process.this_burst(),
-                                                                                                         self.__printreadyqueueFCFS__(
-                                                                                                             ready_q))) if self.time <= 9999 else None
+                                                                                                         activeProcess.id,
+                                                                                                         activeProcess.currentBurst(),
+                                                                                                         self.printFCFS(
+                                                                                                             readyQueue))) if self.time <= 9999 else None
                         else:
                             print(
                                 "time {}ms: Process {} started using the CPU for remaining {}ms of {}ms burst {}".format(
-                                    self.time, current_process.pid, current_process.this_burst(),
-                                    current_process.this_og_burst(),
-                                    self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
-                        self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
-                    next_quantum = self.time + quantum
+                                    self.time, activeProcess.id, activeProcess.currentBurst(),
+                                    activeProcess.currentOGBurst(),
+                                    self.printFCFS(readyQueue))) if self.time <= 9999 else None
+                        self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
+                    nextEventTime = self.time + currEventTime
             else:
-                run_time = arrival_q[-1].arrival_time - self.time
-                self.time = min(arrival_q[-1].arrival_time, self.time + current_process.this_burst())
-                current_process.run(run_time)
+                busyTime = unarrived[-1].arrivalTime - self.time
+                self.time = min(unarrived[-1].arrivalTime, self.time + activeProcess.currentBurst())
+                activeProcess.run__(busyTime)
                 # Check if process will complete before end of next quantum
-                if current_process.this_burst() <= 0:
+                if activeProcess.currentBurst() <= 0:
                     # Process finishes using the CPU and context switches with the next process
-                    io_wait_time = current_process.this_io()
-                    current_process.complete_this_burst()
+                    ioBoundWaitTime = activeProcess.currentIOBurst()
+                    activeProcess.finishBurst()
                     # If this process is not finished, put somewhere in the arrival q
-                    if not current_process.done():
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                    if not activeProcess.finished():
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                         # Indicate that this process has completed its burst
                         print("time {}ms: Process {} completed a CPU burst; {} burst{} to go {}".format(self.time,
-                                                                                                        current_process.pid,
-                                                                                                        current_process.remaining_bursts(),
-                                                                                                        "s" if current_process.remaining_bursts() > 1 else "",
-                                                                                                        self.__printreadyqueueFCFS__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
+                                                                                                        activeProcess.id,
+                                                                                                        activeProcess.burstsRemaining(),
+                                                                                                        "s" if activeProcess.burstsRemaining() > 1 else "",
+                                                                                                        self.printFCFS(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
                         # Context switch out of the cpu
                         print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                            self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                            self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBoundWaitTime,
+                            self.printFCFS(readyQueue))) if self.time <= 9999 else None
                         # Set new arrival time for process
-                        current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                        activeProcess.arrivalTime = self.time + ioBoundWaitTime + self.__tcs__ // 2
                         # Search for new chronological spot in arrival q from end
-                        i = len(arrival_q) - 1
-                        while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                                current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                                arrival_q[i].pid)):
+                        i = len(unarrived) - 1
+                        while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                                activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                                unarrived[i].id)):
                             i -= 1
-                        arrival_q.insert(i + 1, current_process)
+                        unarrived.insert(i + 1, activeProcess)
                     else:
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                        print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                           self.__printreadyqueueFCFS__(ready_q)))
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                        print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                           self.printFCFS(readyQueue)))
                     # Context switch out of CPU
                     self.time += self.__tcs__ // 2
-                    current_process = None
+                    activeProcess = None
                 else:
-                    self.time = arrival_q[-1].arrival_time
+                    self.time = unarrived[-1].arrivalTime
         print("time {}ms: Simulator ended for RR [Q <empty>]".format(self.time))
-        self.__savestats__("RR")
-        self.state = {}
+        self.writeStats("RR")
+        self.status = {}
         self.time = 0
 
-    def fcfs(self, process_list: list):
-        print("time {}ms: Simulator started for FCFS {}".format(0, self.__printreadyqueueFCFS__([])))
-        [p.compute_predicted(self.lamda, self.alpha) for p in process_list]
-        arrival_q = sorted(process_list, key=lambda p: (p.arrival_time, p.pid), reverse=True)
-        for p in process_list:
-            self.state[p] = []
-            for i in range(p.cpu_bursts):
-                self.state[p].append({})
-                self.state[p][i]["READY"] = []
-                self.state[p][i]["ENTRY"] = []
-                self.state[p][i]["EXIT"] = []
-        ready_q = []
-        current_process = None
-        next_burst_completion = 2 ** 32
-        while current_process or len(arrival_q) != 0 or len(ready_q) != 0:
+    def firstComeFirstServed(self, processes: list):
+        print("time {}ms: Simulator started for FCFS {}".format(0, self.printFCFS([])))
+        [p.calcTau(self.lambda_, self.alpha) for p in processes]
+        unarrived = sorted(processes, key=lambda p: (p.arrivalTime, p.id), reverse=True)
+        for p in processes:
+            self.status[p] = []
+            for i in range(p.numCPUBursts):
+                self.status[p].append({})
+                self.status[p][i]["READY"] = []
+                self.status[p][i]["ENTRY"] = []
+                self.status[p][i]["EXIT"] = []
+        readyQueue = []
+        activeProcess = None
+        nextBurstEnd = 2 ** 32
+        while activeProcess or len(unarrived) != 0 or len(readyQueue) != 0:
             # Get all arrivals while before the next burst completion
-            if len(arrival_q) > 0:
-                while len(arrival_q) > 0 and arrival_q[-1].arrival_time <= next_burst_completion:
+            if len(unarrived) > 0:
+                while len(unarrived) > 0 and unarrived[-1].arrivalTime <= nextBurstEnd:
                     # Get next set of arrivals
-                    next_arrivals = self.get_next_arrivals(arrival_q)
-                    self.time = next_arrivals[0].arrival_time
+                    incomingProcesses = self.getIncomingProcesses(unarrived)
+                    self.time = incomingProcesses[0].arrivalTime
                     # Add all arrivals to ready q
-                    for p in next_arrivals:
-                        ready_q.append(p)
-                        if p.burst_index == 0:
-                            print("time {}ms: Process {} arrived; added to ready queue {}".format(p.arrival_time, p.pid,
-                                                                                                  self.__printreadyqueueFCFS__(
-                                                                                                      ready_q))) if self.time <= 9999 else None
+                    for p in incomingProcesses:
+                        readyQueue.append(p)
+                        if p.burstIndex == 0:
+                            print("time {}ms: Process {} arrived; added to ready queue {}".format(p.arrivalTime, p.id,
+                                                                                                  self.printFCFS(
+                                                                                                      readyQueue))) if self.time <= 9999 else None
                         else:
-                            print("time {}ms: Process {} completed I/O; added to ready queue {}".format(p.arrival_time,
-                                                                                                        p.pid,
-                                                                                                        self.__printreadyqueueFCFS__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
-                        self.state[p][p.burst_index]["READY"].append(self.time)
-                    if not current_process:
+                            print("time {}ms: Process {} completed I/O; added to ready queue {}".format(p.arrivalTime,
+                                                                                                        p.id,
+                                                                                                        self.printFCFS(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
+                        self.status[p][p.burstIndex]["READY"].append(self.time)
+                    if not activeProcess:
                         # Context switch in as soon as the process arrives if nothing is in the CPU
                         self.time += self.__tcs__ // 2
-                        current_process = ready_q.pop(0)
-                        self.time_in_cpu += current_process.this_burst()
-                        next_burst_completion = self.time + current_process.this_burst()
+                        activeProcess = readyQueue.pop(0)
+                        self.busyTime += activeProcess.currentBurst()
+                        nextBurstEnd = self.time + activeProcess.currentBurst()
                         print("time {}ms: Process {} started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                     current_process.pid,
-                                                                                                     current_process.this_burst(),
-                                                                                                     self.__printreadyqueueFCFS__(
-                                                                                                         ready_q))) if self.time <= 9999 else None
-                        self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
+                                                                                                     activeProcess.id,
+                                                                                                     activeProcess.currentBurst(),
+                                                                                                     self.printFCFS(
+                                                                                                         readyQueue))) if self.time <= 9999 else None
+                        self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
                         # Complete this burst if there is a current process
-                if current_process:
+                if activeProcess:
                     # Process finishes using the CPU and context switches with the next process
-                    self.time = next_burst_completion
-                    old_tau = current_process.this_og_tau()
-                    io_wait_time = current_process.this_io()
-                    current_process.complete_this_burst()
+                    self.time = nextBurstEnd
+                    ioBoundWaitTime = activeProcess.currentIOBurst()
+                    activeProcess.finishBurst()
                     # If this process is not finished, put somewhere in the arrival q
-                    if not current_process.done():
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                    if not activeProcess.finished():
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                         # Indicate that this process has completed its burst
                         print("time {}ms: Process {} completed a CPU burst; {} burst{} to go {}".format(self.time,
-                                                                                                        current_process.pid,
-                                                                                                        current_process.remaining_bursts(),
-                                                                                                        "s" if current_process.remaining_bursts() > 1 else "",
-                                                                                                        self.__printreadyqueueFCFS__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
+                                                                                                        activeProcess.id,
+                                                                                                        activeProcess.burstsRemaining(),
+                                                                                                        "s" if activeProcess.burstsRemaining() > 1 else "",
+                                                                                                        self.printFCFS(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
                         # Context switch out of the cpu
                         print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                            self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                            self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBoundWaitTime,
+                            self.printFCFS(readyQueue))) if self.time <= 9999 else None
                         # Set new arrival time for process
-                        current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                        activeProcess.arrivalTime = self.time + ioBoundWaitTime + self.__tcs__ // 2
                         # Search for new chronological spot in arrival q from end
-                        i = len(arrival_q) - 1
-                        while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                                current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                                arrival_q[i].pid)):
+                        i = len(unarrived) - 1
+                        while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                                activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                                unarrived[i].id)):
                             i -= 1
-                        arrival_q.insert(i + 1, current_process)
+                        unarrived.insert(i + 1, activeProcess)
                     else:
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                        print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                           self.__printreadyqueueFCFS__(ready_q)))
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                        print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                           self.printFCFS(readyQueue)))
                     # Context switch out of CPU
                     self.time += self.__tcs__ // 2
-                    current_process = None
-            elif current_process:
+                    activeProcess = None
+            elif activeProcess:
                 # Process finishes using the CPU and context switches with the next process
-                self.time = next_burst_completion
-                old_tau = current_process.this_og_tau()
-                io_wait_time = current_process.this_io()
-                current_process.complete_this_burst()
+                self.time = nextBurstEnd
+                ioBoundWaitTime = activeProcess.currentIOBurst()
+                activeProcess.finishBurst()
                 # If this process is not finished, put somewhere in the arrival q
-                if not current_process.done():
-                    self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                if not activeProcess.finished():
+                    self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                     # Indicate that this process has completed its burst
                     print("time {}ms: Process {} completed a CPU burst; {} burst{} to go {}".format(self.time,
-                                                                                                    current_process.pid,
-                                                                                                    current_process.remaining_bursts(),
-                                                                                                    "s" if current_process.remaining_bursts() > 1 else "",
-                                                                                                    self.__printreadyqueueFCFS__(
-                                                                                                        ready_q))) if self.time <= 9999 else None
+                                                                                                    activeProcess.id,
+                                                                                                    activeProcess.burstsRemaining(),
+                                                                                                    "s" if activeProcess.burstsRemaining() > 1 else "",
+                                                                                                    self.printFCFS(
+                                                                                                        readyQueue))) if self.time <= 9999 else None
                     # Context switch out of the cpu
                     print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                        self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                        self.__printreadyqueueFCFS__(ready_q))) if self.time <= 9999 else None
+                        self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBoundWaitTime,
+                        self.printFCFS(readyQueue))) if self.time <= 9999 else None
                     # Set new arrival time for process
-                    current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                    activeProcess.arrivalTime = self.time + ioBoundWaitTime + self.__tcs__ // 2
                     # Search for new chronological spot in arrival q from end
-                    i = len(arrival_q) - 1
-                    while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                            current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                            arrival_q[i].pid)):
+                    i = len(unarrived) - 1
+                    while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                            activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                            unarrived[i].id)):
                         i -= 1
-                    arrival_q.insert(i + 1, current_process)
+                    unarrived.insert(i + 1, activeProcess)
                 else:
-                    self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                    print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                       self.__printreadyqueueFCFS__(ready_q)))
+                    self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                    print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                       self.printFCFS(readyQueue)))
                 # Context switch out of CPU
                 self.time += self.__tcs__ // 2
-                current_process = None
+                activeProcess = None
 
             # Place next process in CPU
-            if len(ready_q) > 0:
+            if len(readyQueue) > 0:
                 self.time += self.__tcs__ // 2
-                current_process = ready_q.pop(0)
-                next_burst_completion = self.time + current_process.this_burst()
+                activeProcess = readyQueue.pop(0)
+                nextBurstEnd = self.time + activeProcess.currentBurst()
                 print("time {}ms: Process {} started using the CPU for {}ms burst {}".format(self.time,
-                                                                                             current_process.pid,
-                                                                                             current_process.this_burst(),
-                                                                                             self.__printreadyqueueFCFS__(
-                                                                                                 ready_q))) if self.time <= 9999 else None
-                self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
-                self.time_in_cpu += current_process.this_burst()
+                                                                                             activeProcess.id,
+                                                                                             activeProcess.currentBurst(),
+                                                                                             self.printFCFS(
+                                                                                                 readyQueue))) if self.time <= 9999 else None
+                self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
+                self.busyTime += activeProcess.currentBurst()
             else:
-                next_burst_completion = 2 ** 32
+                nextBurstEnd = 2 ** 32
         print("time {}ms: Simulator ended for FCFS [Q <empty>]".format(self.time))
         # Write stats to simout.txt
-        self.__savestats__("FCFS")
-        self.state = {}
+        self.writeStats("FCFS")
+        self.status = {}
         self.time = 0
 
-    def get_next_arrivals(self, arrival_q):
-        next_arrivals = []
-        next_arrival_time = arrival_q[-1].arrival_time
-        while len(arrival_q) > 0 and arrival_q[-1].arrival_time == next_arrival_time:
-            next_arrivals.append(arrival_q.pop())
-        return next_arrivals
+    def getIncomingProcesses(self, q):
+        incomingProcesses = []
+        nextProcessArrival = q[-1].arrivalTime
+        while len(q) > 0 and q[-1].arrivalTime == nextProcessArrival:
+            incomingProcesses.append(q.pop())
+        return incomingProcesses
 
-    def add_to_ready_q(self, processes, ready_q):
+    def addReadyProcess(self, processes, q):
         for p in processes:
-            heappush(ready_q, (p.this_tau(), p.pid, p))
+            heappush(q, (p.currentTau(), p.id, p))
 
-    def shortest_job_first(self, process_list: list):
-        print("time {}ms: Simulator started for SJF {}".format(0, self.__printreadyqueue__([])))
-        [p.compute_predicted(self.lamda, self.alpha) for p in process_list]
-        for p in process_list:
-            self.state[p] = []
-            for i in range(p.cpu_bursts):
-                self.state[p].append({})
-                self.state[p][i]["READY"] = []
-                self.state[p][i]["ENTRY"] = []
-                self.state[p][i]["EXIT"] = []
-        arrival_q = sorted(process_list, key=lambda p: (p.arrival_time, p.pid), reverse=True)
-        ready_q = []
-        current_process = None
-        next_burst_completion = 2 ** 32
-        while current_process or len(arrival_q) != 0 or len(ready_q) != 0:
+    def shortestJobFirst(self, processes: list):
+        print("time {}ms: Simulator started for SJF {}".format(0, self.printQueue([])))
+        [p.calcTau(self.lambda_, self.alpha) for p in processes]
+        for p in processes:
+            self.status[p] = []
+            for i in range(p.numCPUBursts):
+                self.status[p].append({})
+                self.status[p][i]["READY"] = []
+                self.status[p][i]["ENTRY"] = []
+                self.status[p][i]["EXIT"] = []
+        unarrived = sorted(processes, key=lambda p: (p.arrivalTime, p.id), reverse=True)
+        readyQueue = []
+        activeProcess = None
+        nextBurstEnd = 2 ** 32
+        while activeProcess or len(unarrived) != 0 or len(readyQueue) != 0:
             # Get all arrivals while before the next burst completion
-            if len(arrival_q) > 0:
-                while len(arrival_q) > 0 and arrival_q[-1].arrival_time < next_burst_completion:
+            if len(unarrived) > 0:
+                while len(unarrived) > 0 and unarrived[-1].arrivalTime < nextBurstEnd:
                     # Get next set of arrivals
-                    next_arrivals = self.get_next_arrivals(arrival_q)
-                    self.time = next_arrivals[0].arrival_time
+                    incomingProcesses = self.getIncomingProcesses(unarrived)
+                    self.time = incomingProcesses[0].arrivalTime
                     # Add all arrivals to ready q
-                    for p in next_arrivals:
-                        heappush(ready_q, (p.this_tau(), p.pid, p))
-                        if p.burst_index == 0:
+                    for p in incomingProcesses:
+                        heappush(readyQueue, (p.currentTau(), p.id, p))
+                        if p.burstIndex == 0:
                             print("time {}ms: Process {} (tau {}ms) arrived; added to ready queue {}".format(
-                                p.arrival_time, p.pid, p.this_tau(),
-                                self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                                p.arrivalTime, p.id, p.currentTau(),
+                                self.printQueue(readyQueue))) if self.time <= 9999 else None
                         else:
                             print("time {}ms: Process {} (tau {}ms) completed I/O; added to ready queue {}".format(
-                                p.arrival_time, p.pid, p.this_tau(),
-                                self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
-                    self.state[p][p.burst_index]["READY"].append(self.time)
-                    if not current_process:
+                                p.arrivalTime, p.id, p.currentTau(),
+                                self.printQueue(readyQueue))) if self.time <= 9999 else None
+                    self.status[p][p.burstIndex]["READY"].append(self.time)
+                    if not activeProcess:
                         # Context switch in as soon as the process arrives if nothing is in the CPU
                         self.time += self.__tcs__ // 2
-                        _, _, current_process = heappop(ready_q)
-                        next_burst_completion = self.time + current_process.this_burst()
+                        _, _, activeProcess = heappop(readyQueue)
+                        nextBurstEnd = self.time + activeProcess.currentBurst()
                         print(
                             "time {}ms: Process {} (tau {}ms) started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                              current_process.pid,
-                                                                                                              current_process.this_tau(),
-                                                                                                              current_process.this_burst(),
-                                                                                                              self.__printreadyqueue__(
-                                                                                                                  ready_q))) if self.time <= 9999 else None
-                        self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
+                                                                                                              activeProcess.id,
+                                                                                                              activeProcess.currentTau(),
+                                                                                                              activeProcess.currentBurst(),
+                                                                                                              self.printQueue(
+                                                                                                                  readyQueue))) if self.time <= 9999 else None
+                        self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
                         # Complete this burst if there is a current process
-                if current_process:
+                if activeProcess:
                     # Process finishes using the CPU and context switches with the next process
-                    self.time = next_burst_completion
-                    old_tau = current_process.this_og_tau()
-                    io_wait_time = current_process.this_io()
-                    current_process.complete_this_burst()
+                    self.time = nextBurstEnd
+                    oldTau = activeProcess.currentOGTau()
+                    ioBurstWaitTime = activeProcess.currentIOBurst()
+                    activeProcess.finishBurst()
                     # If this process is not finished, put somewhere in the arrival q
-                    if not current_process.done():
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                    if not activeProcess.finished():
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                         # Indicate that this process has completed its burst
                         print("time {}ms: Process {} (tau {}ms) completed a CPU burst; {} burst{} to go {}".format(
-                            self.time, current_process.pid, old_tau, current_process.remaining_bursts(),
-                            "s" if current_process.remaining_bursts() > 1 else "",
-                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, oldTau, activeProcess.burstsRemaining(),
+                            "s" if activeProcess.burstsRemaining() > 1 else "",
+                            self.printQueue(readyQueue))) if self.time <= 9999 else None
                         # Compute a new tau value
                         print("time {}ms: Recalculating tau for process {}: old tau {}ms ==> new tau {}ms {}".format(
-                            self.time, current_process.pid, old_tau, current_process.this_tau(),
-                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, oldTau, activeProcess.currentTau(),
+                            self.printQueue(readyQueue))) if self.time <= 9999 else None
                         # Context switch out of the cpu
                         print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                            self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBurstWaitTime,
+                            self.printQueue(readyQueue))) if self.time <= 9999 else None
                         # Set new arrival time for process
-                        current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                        activeProcess.arrivalTime = self.time + ioBurstWaitTime + self.__tcs__ // 2
                         # Search for new chronological spot in arrival q from end
-                        i = len(arrival_q) - 1
-                        while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                                current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                                arrival_q[i].pid)):
+                        i = len(unarrived) - 1
+                        while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                                activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                                unarrived[i].id)):
                             i -= 1
-                        arrival_q.insert(i + 1, current_process)
-                        if len(arrival_q) > 0 and arrival_q[-1].arrival_time == self.time:
+                        unarrived.insert(i + 1, activeProcess)
+                        if len(unarrived) > 0 and unarrived[-1].arrivalTime == self.time:
                             # Get next set of arrivals
-                            next_arrivals = self.get_next_arrivals(arrival_q)
-                            self.time = next_arrivals[0].arrival_time
+                            incomingProcesses = self.getIncomingProcesses(unarrived)
+                            self.time = incomingProcesses[0].arrivalTime
                             # Add all arrivals to ready q
-                            for p in next_arrivals:
-                                heappush(ready_q, (p.this_tau(), p.pid, p))
-                                if p.burst_index == 0:
+                            for p in incomingProcesses:
+                                heappush(readyQueue, (p.currentTau(), p.id, p))
+                                if p.burstIndex == 0:
                                     print("time {}ms: Process {} (tau {}ms) arrived; added to ready queue {}".format(
-                                        p.arrival_time, p.pid, p.this_tau(),
-                                        self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                                        p.arrivalTime, p.id, p.currentTau(),
+                                        self.printQueue(readyQueue))) if self.time <= 9999 else None
                                 else:
                                     print(
                                         "time {}ms: Process {} (tau {}ms) completed I/O; added to ready queue {}".format(
-                                            p.arrival_time, p.pid, p.this_tau(),
-                                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
-                                self.state[p][p.burst_index]["READY"].append(self.time)
+                                            p.arrivalTime, p.id, p.currentTau(),
+                                            self.printQueue(readyQueue))) if self.time <= 9999 else None
+                                self.status[p][p.burstIndex]["READY"].append(self.time)
 
                     else:
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                        print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                           self.__printreadyqueue__(ready_q)))
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                        print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                           self.printQueue(readyQueue)))
                     # Context switch out of CPU
                     self.time += self.__tcs__ // 2
-                    current_process = None
-            elif current_process:
+                    activeProcess = None
+            elif activeProcess:
                 # Process finishes using the CPU and context switches with the next process
-                self.time = next_burst_completion
-                old_tau = current_process.this_og_tau()
-                io_wait_time = current_process.this_io()
-                current_process.complete_this_burst()
+                self.time = nextBurstEnd
+                oldTau = activeProcess.currentOGTau()
+                ioBurstWaitTime = activeProcess.currentIOBurst()
+                activeProcess.finishBurst()
                 # If this process is not finished, put somewhere in the arrival q
-                if not current_process.done():
-                    self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                if not activeProcess.finished():
+                    self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                     # Indicate that this process has completed its burst
                     print(
                         "time {}ms: Process {} (tau {}ms) completed a CPU burst; {} burst{} to go {}".format(self.time,
-                                                                                                             current_process.pid,
-                                                                                                             old_tau,
-                                                                                                             current_process.remaining_bursts(),
-                                                                                                             "s" if current_process.remaining_bursts() > 1 else "",
-                                                                                                             self.__printreadyqueue__(
-                                                                                                                 ready_q))) if self.time <= 9999 else None
+                                                                                                             activeProcess.id,
+                                                                                                             oldTau,
+                                                                                                             activeProcess.burstsRemaining(),
+                                                                                                             "s" if activeProcess.burstsRemaining() > 1 else "",
+                                                                                                             self.printQueue(
+                                                                                                                 readyQueue))) if self.time <= 9999 else None
                     # Compute a new tau value
                     print("time {}ms: Recalculating tau for process {}: old tau {}ms ==> new tau {}ms {}".format(
-                        self.time, current_process.pid, old_tau, current_process.this_tau(),
-                        self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                        self.time, activeProcess.id, oldTau, activeProcess.currentTau(),
+                        self.printQueue(readyQueue))) if self.time <= 9999 else None
                     # Context switch out of the cpu
                     print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                        self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                        self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                        self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBurstWaitTime,
+                        self.printQueue(readyQueue))) if self.time <= 9999 else None
                     # Set new arrival time for process
-                    current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                    activeProcess.arrivalTime = self.time + ioBurstWaitTime + self.__tcs__ // 2
                     # Search for new chronological spot in arrival q from end
-                    i = len(arrival_q) - 1
-                    while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                            current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                            arrival_q[i].pid)):
+                    i = len(unarrived) - 1
+                    while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                            activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                            unarrived[i].id)):
                         i -= 1
-                    arrival_q.insert(i + 1, current_process)
+                    unarrived.insert(i + 1, activeProcess)
                 else:
-                    self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                    print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                       self.__printreadyqueue__(ready_q)))
+                    self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                    print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                       self.printQueue(readyQueue)))
                 # Context switch out of CPU
                 self.time += self.__tcs__ // 2
-                current_process = None
+                activeProcess = None
 
             # Place next process in CPU
-            if len(ready_q) > 0:
+            if len(readyQueue) > 0:
                 self.time += self.__tcs__ // 2
                 # Check for arrivals
-                _, _, current_process = heappop(ready_q)
-                next_burst_completion = self.time + current_process.this_burst()
+                _, _, activeProcess = heappop(readyQueue)
+                nextBurstEnd = self.time + activeProcess.currentBurst()
                 print("time {}ms: Process {} (tau {}ms) started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                        current_process.pid,
-                                                                                                        current_process.this_tau(),
-                                                                                                        current_process.this_burst(),
-                                                                                                        self.__printreadyqueue__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
-                self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
+                                                                                                        activeProcess.id,
+                                                                                                        activeProcess.currentTau(),
+                                                                                                        activeProcess.currentBurst(),
+                                                                                                        self.printQueue(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
+                self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
             else:
-                next_burst_completion = 2 ** 32
+                nextBurstEnd = 2 ** 32
 
         print("time {}ms: Simulator ended for SJF [Q <empty>]".format(self.time))
-        self.__savestats__("SJF")
-        self.state = {}
+        self.writeStats("SJF")
+        self.status = {}
         self.time = 0
 
-    def shortest_time_remaining(self, process_list: list):
-        print("time {}ms: Simulator started for SRT {}".format(0, self.__printreadyqueue__([])))
-        [p.compute_predicted(self.lamda, self.alpha) for p in process_list]
-        arrival_q = sorted(process_list, key=lambda p: (p.arrival_time, p.pid), reverse=True)
+    def shortestRemainingTime(self, process_list: list):
+        print("time {}ms: Simulator started for SRT {}".format(0, self.printQueue([])))
+        [p.calcTau(self.lambda_, self.alpha) for p in process_list]
+        unarrived = sorted(process_list, key=lambda p: (p.arrivalTime, p.id), reverse=True)
         for p in process_list:
-            self.state[p] = []
-            for i in range(p.cpu_bursts):
-                self.state[p].append({})
-                self.state[p][i]["READY"] = []
-                self.state[p][i]["ENTRY"] = []
-                self.state[p][i]["EXIT"] = []
-        ready_q = []
-        current_process = None
-        next_burst_completion = 2 ** 32
-        while current_process or len(arrival_q) != 0 or len(ready_q) != 0:
+            self.status[p] = []
+            for i in range(p.numCPUBursts):
+                self.status[p].append({})
+                self.status[p][i]["READY"] = []
+                self.status[p][i]["ENTRY"] = []
+                self.status[p][i]["EXIT"] = []
+        readyQueue = []
+        activeProcess = None
+        nextBurstEnd = 2 ** 32
+        while activeProcess or len(unarrived) != 0 or len(readyQueue) != 0:
             # Get all arrivals while before the next burst completion
-            if len(arrival_q) > 0:
-                while len(arrival_q) > 0 and arrival_q[-1].arrival_time <= next_burst_completion:
+            if len(unarrived) > 0:
+                while len(unarrived) > 0 and unarrived[-1].arrivalTime <= nextBurstEnd:
                     # Get next set of arrivals
-                    next_arrivals = self.get_next_arrivals(arrival_q)
-                    self.time = next_arrivals[0].arrival_time
-                    if current_process:
-                        current_process.run(current_process.this_burst() - (next_burst_completion - self.time))
+                    incomingProcesses = self.getIncomingProcesses(unarrived)
+                    self.time = incomingProcesses[0].arrivalTime
+                    if activeProcess:
+                        activeProcess.run__(activeProcess.currentBurst() - (nextBurstEnd - self.time))
                     # Add all arrivals to ready q and consider pre-emption
                     preempted = False
-                    for p in next_arrivals:
-                        heappush(ready_q, (p.this_tau(), p.pid, p))
-                        if current_process and not preempted and (p.this_tau() < current_process.this_tau() or (
-                                p.this_tau() == current_process.this_tau() and p.pid < current_process.pid)):
+                    for p in incomingProcesses:
+                        heappush(readyQueue, (p.currentTau(), p.id, p))
+                        if activeProcess and not preempted and (p.currentTau() < activeProcess.currentTau() or (
+                                p.currentTau() == activeProcess.currentTau() and p.id < activeProcess.id)):
                             # Pre-empt the current process
                             preempted = True
-                            if p.burst_index == 0:
+                            if p.burstIndex == 0:
                                 print(
-                                    "time {}ms: Process {} (tau {}ms) arrived; preempting {} {}".format(p.arrival_time,
-                                                                                                        p.pid,
-                                                                                                        p.this_tau(),
-                                                                                                        current_process.pid,
-                                                                                                        self.__printreadyqueue__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
+                                    "time {}ms: Process {} (tau {}ms) arrived; preempting {} {}".format(p.arrivalTime,
+                                                                                                        p.id,
+                                                                                                        p.currentTau(),
+                                                                                                        activeProcess.id,
+                                                                                                        self.printQueue(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
                             else:
                                 print("time {}ms: Process {} (tau {}ms) completed I/O; preempting {} {}".format(
-                                    p.arrival_time, p.pid, p.this_tau(), current_process.pid,
-                                    self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                                    p.arrivalTime, p.id, p.currentTau(), activeProcess.id,
+                                    self.printQueue(readyQueue))) if self.time <= 9999 else None
                         else:
-                            if p.burst_index == 0:
+                            if p.burstIndex == 0:
                                 print("time {}ms: Process {} (tau {}ms) arrived; added to ready queue {}".format(
-                                    p.arrival_time, p.pid, p.this_tau(),
-                                    self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                                    p.arrivalTime, p.id, p.currentTau(),
+                                    self.printQueue(readyQueue))) if self.time <= 9999 else None
                             else:
                                 print("time {}ms: Process {} (tau {}ms) completed I/O; added to ready queue {}".format(
-                                    p.arrival_time, p.pid, p.this_tau(),
-                                    self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
-                        self.state[p][p.burst_index]["READY"].append(self.time)
+                                    p.arrivalTime, p.id, p.currentTau(),
+                                    self.printQueue(readyQueue))) if self.time <= 9999 else None
+                        self.status[p][p.burstIndex]["READY"].append(self.time)
                     if preempted:
                         # Accunt for context switch from former process during preemption
-                        self.state[current_process][current_process.burst_index]["EXIT"].append(self.time)
-                        heappush(ready_q, (current_process.this_tau(), current_process.pid, current_process))
-                        self.state[current_process][current_process.burst_index]["READY"].append(
+                        self.status[activeProcess][activeProcess.burstIndex]["EXIT"].append(self.time)
+                        heappush(readyQueue, (activeProcess.currentTau(), activeProcess.id, activeProcess))
+                        self.status[activeProcess][activeProcess.burstIndex]["READY"].append(
                             self.time + self.__tcs__ // 2)
-                        current_process = None
+                        activeProcess = None
                         self.time += self.__tcs__ // 2
-                    if not current_process:
+                    if not activeProcess:
                         # Context switch in as soon as the process arrives if nothing is in the CPU
                         self.time += self.__tcs__ // 2
-                        _, _, current_process = heappop(ready_q)
-                        next_burst_completion = self.time + current_process.this_burst()
-                        print(
-                            "time {}ms: Process {} (tau {}ms) started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                              current_process.pid,
-                                                                                                              current_process.this_tau(),
-                                                                                                              current_process.this_burst(),
-                                                                                                              self.__printreadyqueue__(
-                                                                                                                  ready_q))) if self.time <= 9999 else None
-                        self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
+                        _, _, activeProcess = heappop(readyQueue)
+                        nextBurstEnd = self.time + activeProcess.currentBurst()
+                        if activeProcess.currentBurst() == activeProcess.currentOGBurst():
+                            print(
+                                "time {}ms: Process {} (tau {}ms) started using the CPU for {}ms burst {}".format(self.time,
+                                                                                                                activeProcess.id,
+                                                                                                                activeProcess.currentTau(),
+                                                                                                                activeProcess.currentBurst(),
+                                                                                                                self.printQueue(
+                                                                                                                    readyQueue))) if self.time <= 9999 else None
+                        else:
+                            print(
+                                "time {}ms: Process {} (tau {}ms) started using the CPU for remaining {}ms of {}ms burst {}".format(self.time,
+                                                                                                                activeProcess.id,
+                                                                                                                activeProcess.currentTau(),
+                                                                                                                activeProcess.currentBurst(),
+                                                                                                                activeProcess.currentOGBurst(),
+                                                                                                                self.printQueue(
+                                                                                                                    readyQueue))) if self.time <= 9999 else None
+                        self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
                         # Complete this burst if there is a current process
-                if current_process:
+                if activeProcess:
                     # Process finishes using the CPU and context switches with the next process
-                    self.time = next_burst_completion
-                    old_tau = current_process.this_og_tau()
-                    io_wait_time = current_process.this_io()
-                    current_process.complete_this_burst()
+                    self.time = nextBurstEnd
+                    oldTau = activeProcess.currentOGTau()
+                    ioBurstWaitTime = activeProcess.currentIOBurst()
+                    activeProcess.finishBurst()
                     # If this process is not finished, put somewhere in the arrival q
-                    if not current_process.done():
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                    if not activeProcess.finished():
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                         # Indicate that this process has completed its burst
                         print("time {}ms: Process {} (tau {}ms) completed a CPU burst; {} burst{} to go {}".format(
-                            self.time, current_process.pid, old_tau, current_process.remaining_bursts(),
-                            "s" if current_process.remaining_bursts() > 1 else "",
-                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, oldTau, activeProcess.burstsRemaining(),
+                            "s" if activeProcess.burstsRemaining() > 1 else "",
+                            self.printQueue(readyQueue))) if self.time <= 9999 else None
                         # Compute a new tau value
                         print("time {}ms: Recalculating tau for process {}: old tau {}ms ==> new tau {}ms {}".format(
-                            self.time, current_process.pid, old_tau, current_process.this_tau(),
-                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, oldTau, activeProcess.currentTau(),
+                            self.printQueue(readyQueue))) if self.time <= 9999 else None
                         # Context switch out of the cpu
                         print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                            self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                            self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                            self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBurstWaitTime,
+                            self.printQueue(readyQueue))) if self.time <= 9999 else None
                         # Set new arrival time for process
-                        current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                        activeProcess.arrivalTime = self.time + ioBurstWaitTime + self.__tcs__ // 2
                         # Search for new chronological spot in arrival q from end
-                        i = len(arrival_q) - 1
-                        while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                                current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                                arrival_q[i].pid)):
+                        i = len(unarrived) - 1
+                        while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                                activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                                unarrived[i].id)):
                             i -= 1
-                        arrival_q.insert(i + 1, current_process)
+                        unarrived.insert(i + 1, activeProcess)
                     else:
-                        self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                        print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                           self.__printreadyqueue__(ready_q)))
+                        self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                        print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                           self.printQueue(readyQueue)))
                     # Context switch out of CPU
                     self.time += self.__tcs__ // 2
-                    current_process = None
-            elif current_process:
+                    activeProcess = None
+            elif activeProcess:
                 # Process finishes using the CPU and context switches with the next process
-                self.time = next_burst_completion
-                old_tau = current_process.this_og_tau()
-                io_wait_time = current_process.this_io()
-                current_process.complete_this_burst()
+                self.time = nextBurstEnd
+                oldTau = activeProcess.currentOGTau()
+                ioBurstWaitTime = activeProcess.currentIOBurst()
+                activeProcess.finishBurst()
                 # If this process is not finished, put somewhere in the arrival q
-                if not current_process.done():
-                    self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
+                if not activeProcess.finished():
+                    self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
                     # Indicate that this process has completed its burst
                     print(
                         "time {}ms: Process {} (tau {}ms) completed a CPU burst; {} burst{} to go {}".format(self.time,
-                                                                                                             current_process.pid,
-                                                                                                             old_tau,
-                                                                                                             current_process.remaining_bursts(),
-                                                                                                             "s" if current_process.remaining_bursts() > 1 else "",
-                                                                                                             self.__printreadyqueue__(
-                                                                                                                 ready_q))) if self.time <= 9999 else None
+                                                                                                             activeProcess.id,
+                                                                                                             oldTau,
+                                                                                                             activeProcess.burstsRemaining(),
+                                                                                                             "s" if activeProcess.burstsRemaining() > 1 else "",
+                                                                                                             self.printQueue(
+                                                                                                                 readyQueue))) if self.time <= 9999 else None
                     # Compute a new tau value
                     print("time {}ms: Recalculating tau for process {}: old tau {}ms ==> new tau {}ms {}".format(
-                        self.time, current_process.pid, old_tau, current_process.this_tau(),
-                        self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                        self.time, activeProcess.id, oldTau, activeProcess.currentTau(),
+                        self.printQueue(readyQueue))) if self.time <= 9999 else None
                     # Context switch out of the cpu
                     print("time {}ms: Process {} switching out of CPU; blocking on I/O until time {}ms {}".format(
-                        self.time, current_process.pid, self.time + self.__tcs__ // 2 + io_wait_time,
-                        self.__printreadyqueue__(ready_q))) if self.time <= 9999 else None
+                        self.time, activeProcess.id, self.time + self.__tcs__ // 2 + ioBurstWaitTime,
+                        self.printQueue(readyQueue))) if self.time <= 9999 else None
                     # Set new arrival time for process
-                    current_process.arrival_time = self.time + io_wait_time + self.__tcs__ // 2
+                    activeProcess.arrivalTime = self.time + ioBurstWaitTime + self.__tcs__ // 2
                     # Search for new chronological spot in arrival q from end
-                    i = len(arrival_q) - 1
-                    while i >= 0 and (current_process.arrival_time > arrival_q[i].arrival_time or (
-                            current_process.arrival_time == arrival_q[i].arrival_time and current_process.pid >
-                            arrival_q[i].pid)):
+                    i = len(unarrived) - 1
+                    while i >= 0 and (activeProcess.arrivalTime > unarrived[i].arrivalTime or (
+                            activeProcess.arrivalTime == unarrived[i].arrivalTime and activeProcess.id >
+                            unarrived[i].id)):
                         i -= 1
-                    arrival_q.insert(i + 1, current_process)
+                    unarrived.insert(i + 1, activeProcess)
                 else:
-                    self.state[current_process][current_process.burst_index - 1]["EXIT"].append(self.time)
-                    print("time {}ms: Process {} terminated {}".format(self.time, current_process.pid,
-                                                                       self.__printreadyqueue__(ready_q)))
+                    self.status[activeProcess][activeProcess.burstIndex - 1]["EXIT"].append(self.time)
+                    print("time {}ms: Process {} terminated {}".format(self.time, activeProcess.id,
+                                                                       self.printQueue(readyQueue)))
                 # Context switch out of CPU
                 self.time += self.__tcs__ // 2
-                current_process = None
+                activeProcess = None
 
             # Place next process in CPU
-            if len(ready_q) > 0:
+            if len(readyQueue) > 0:
                 self.time += self.__tcs__ // 2
-                _, _, current_process = heappop(ready_q)
-                next_burst_completion = self.time + current_process.this_burst()
-                print("time {}ms: Process {} (tau {}ms) started using the CPU for {}ms burst {}".format(self.time,
-                                                                                                        current_process.pid,
-                                                                                                        current_process.this_tau(),
-                                                                                                        current_process.this_burst(),
-                                                                                                        self.__printreadyqueue__(
-                                                                                                            ready_q))) if self.time <= 9999 else None
-                self.state[current_process][current_process.burst_index]["ENTRY"].append(self.time)
+                _, _, activeProcess = heappop(readyQueue)
+                nextBurstEnd = self.time + activeProcess.currentBurst()
+                if activeProcess.currentBurst() == activeProcess.currentOGBurst():
+                    print(
+                        "time {}ms: Process {} (tau {}ms) started using the CPU for {}ms burst {}".format(self.time,
+                                                                                                        activeProcess.id,
+                                                                                                        activeProcess.currentTau(),
+                                                                                                        activeProcess.currentBurst(),
+                                                                                                        self.printQueue(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
+                else:
+                    print(
+                        "time {}ms: Process {} (tau {}ms) started using the CPU for remaining {}ms of {}ms burst {}".format(self.time,
+                                                                                                        activeProcess.id,
+                                                                                                        activeProcess.currentTau(),
+                                                                                                        activeProcess.currentBurst(),
+                                                                                                        activeProcess.currentOGBurst(),
+                                                                                                        self.printQueue(
+                                                                                                            readyQueue))) if self.time <= 9999 else None
+                self.status[activeProcess][activeProcess.burstIndex]["ENTRY"].append(self.time)
             else:
-                next_burst_completion = 2 ** 32
+                nextBurstEnd = 2 ** 32
         print("time {}ms: Simulator ended for SRT [Q <empty>]".format(self.time))
-        self.__savestats__("SRT")
-        self.state = {}
+        self.writeStats("SRT")
+        self.status = {}
         self.time = 0

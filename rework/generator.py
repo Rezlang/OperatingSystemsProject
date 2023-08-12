@@ -4,42 +4,42 @@ from process import Process
 
 
 class Generator(object):
-    def __init__(self, lamda: int, ubound: int, seed: int):
-        self.lamda = lamda
+    def __init__(self, lambda_: int, upperBound: int, seed: int):
+        self.lambda_ = lambda_
         self.randomizer = Rand48()
         self.randomizer.srand(seed)
-        self.ubound = ubound
+        self.upperBound = upperBound
 
     def next_exp(self) -> float:
         """
         exponential distribution as a function of random variable r
         if next_exp > self.ubound, we continue generating numbers until we find one <= self.ubound
         """
-        num = self.ubound
-        while num > self.ubound - 1:
-            num = int(-math.log(self.randomizer.drand()) / self.lamda)
+        num = self.upperBound
+        while num > self.upperBound - 1:
+            num = int(-math.log(self.randomizer.drand()) / self.lambda_)
         return num + 1
 
-    def next_process(self, io_bound: bool, pid: str):
+    def next_process(self, isIOBound: bool, id: str):
         """
         @returns a new Process P with an initial arrival time and a number of cpu bursts, each of which
                     has the same burst time. All io wait times for the process also have the same value.
         """
-        initial_arrival_time = math.ceil(self.next_exp()) - 1
-        cpu_bursts = math.ceil(64 * self.randomizer.drand())
+        arrivalTime = math.ceil(self.next_exp()) - 1
+        numCPUBursts = math.ceil(64 * self.randomizer.drand())
         intervals = []
-        for _ in range(cpu_bursts - 1):
-            cpu_burst_time = math.ceil(self.next_exp())
-            io_time = math.ceil(self.next_exp()) * 10
-            if not io_bound:
-                cpu_burst_time *= 4
-                io_time //= 8
-            intervals.append(cpu_burst_time)
-            intervals.append(io_time)
+        for _ in range(numCPUBursts - 1):
+            burstTime = math.ceil(self.next_exp())
+            ioBurstTime = math.ceil(self.next_exp()) * 10
+            if not isIOBound:
+                burstTime *= 4
+                ioBurstTime //= 8
+            intervals.append(burstTime)
+            intervals.append(ioBurstTime)
 
-        cpu_burst_time = math.ceil(self.next_exp())
-        if not io_bound:
-            cpu_burst_time *= 4
-        intervals.append(cpu_burst_time)
+        burstTime = math.ceil(self.next_exp())
+        if not isIOBound:
+            burstTime *= 4
+        intervals.append(burstTime)
 
-        return Process(initial_arrival_time, cpu_bursts, intervals, io_bound, pid)
+        return Process(arrivalTime, numCPUBursts, intervals, isIOBound, id)

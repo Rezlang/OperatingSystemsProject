@@ -15,55 +15,55 @@ if __name__ == '__main__':
         exit(1)
 
     # Runtime vars
-    n_processes = 0
-    n_cpu = 0
-    rand48_seed = 0
-    exp_lambda = 0.0
-    exp_ubound = 0
-    tcs = 0
+    numProc = 0
+    numCPUProc = 0
+    seed = 0
+    lambda_ = 0.0
+    upperBound = 0
+    timeContextSwitch = 0
     alpha = 0
-    tslice = 0
+    timeSlice = 0
 
     try:
-        n_processes = int(sys.argv[1])
-        if n_processes < 1 or n_processes > 26:
+        numProc = int(sys.argv[1])
+        if numProc < 1 or numProc > 26:
             print("ERROR: n_processes should be >= 1 <= 26")
             exit(1)
     except:
         print("ERROR: n_processes should be an integer.")
         exit(1)
     try:
-        n_cpu = int(sys.argv[2])
-        if n_cpu < 0 or n_cpu > n_processes:
+        numCPUProc = int(sys.argv[2])
+        if numCPUProc < 0 or numCPUProc > numProc:
             print("ERROR: n_processes should be >= 1 <= 26")
             exit(1)
     except:
         print("ERROR: n_cpu should be an integer.")
         exit(1)
     try:
-        rand48_seed = int(sys.argv[3])
+        seed = int(sys.argv[3])
     except:
         print("ERROR: rand48_seed should be an integer.")
         exit(1)
     try:
-        exp_lambda = float(sys.argv[4])
-        if exp_lambda < 0:
+        lambda_ = float(sys.argv[4])
+        if lambda_ < 0:
             print("ERROR: n_processes should be >= 1 <= 26")
             exit(1)
     except:
         print("ERROR: exp_lambda should be a float/double.")
         exit(1)
     try:
-        exp_ubound = int(sys.argv[5])
-        if exp_ubound < 1:
+        upperBound = int(sys.argv[5])
+        if upperBound < 1:
             print("ERROR: n_processes should be >= 1 <= 26")
             exit(1)
     except:
         print("ERROR: exp_ubound should be an integer.")
         exit(1)
     try:
-        tcs = int(sys.argv[6])
-        if tcs < 0 or tcs % 2 == 1:
+        timeContextSwitch = int(sys.argv[6])
+        if timeContextSwitch < 0 or timeContextSwitch % 2 == 1:
             print("ERROR: n_processes should be >= 1 <= 26")
             exit(1)
     except:
@@ -80,44 +80,44 @@ if __name__ == '__main__':
         exit(1)
 
     try:
-        tslice = int(sys.argv[8])
-        if tslice < 0:
+        timeSlice = int(sys.argv[8])
+        if timeSlice < 0:
             print("ERROR: n_processes should be >= 1 <= 26")
             exit(1)
     except:
         print("ERROR: tslice should be int")
         exit(1)
 
-    if n_cpu > n_processes:
+    if numCPUProc > numProc:
         print("ERROR: n_proc >= n_cpu")
         exit(1)
 
     # rand
-    gen1 = Generator(exp_lambda, exp_ubound, rand48_seed)
-    processes1 = []
-    for i in range(n_processes):
-        io_bound = i < n_processes - n_cpu
-        p1 = gen1.next_process(io_bound, process_id_set[i])
-        if p1:
-            processes1.append(p1)
+    gen = Generator(lambda_, upperBound, seed)
+    processes = []
+    for i in range(numProc):
+        isIOBound = i < numProc - numCPUProc
+        p = gen.next_process(isIOBound, process_id_set[i])
+        if p:
+            processes.append(p)
         else:
             i -= 1
 
-    print("<<< PROJECT PART I -- process set (n={}) with {} CPU-bound {} >>>".format(n_processes, n_cpu,
-                                                                                     "process" if n_cpu == 1 else "processes"))
-    for i in range(len(processes1)):
-        print(processes1[i])
+    print("<<< PROJECT PART I -- process set (n={}) with {} CPU-bound {} >>>".format(numProc, numCPUProc,
+                                                                                     "process" if numCPUProc == 1 else "processes"))
+    for i in range(len(processes)):
+        print(processes[i])
 
-    print("\n<<< PROJECT PART II -- t_cs={}ms; alpha={:.2f}; t_slice={}ms >>>".format(tcs, alpha, tslice))
+    print("\n<<< PROJECT PART II -- t_cs={}ms; alpha={:.2f}; t_slice={}ms >>>".format(timeContextSwitch, alpha, timeSlice))
     # built processes array
 
-    cpu = CPU(tcs, exp_lambda, alpha)
+    cpu = CPU(timeContextSwitch, lambda_, alpha)
 
     # run algorithms
-    cpu.fcfs(deepcopy(processes1))
+    cpu.firstComeFirstServed(deepcopy(processes))
     print()
-    cpu.shortest_job_first(deepcopy(processes1))
+    cpu.shortestJobFirst(deepcopy(processes))
     print()
-    cpu.shortest_time_remaining(deepcopy(processes1))
+    cpu.shortestRemainingTime(deepcopy(processes))
     print()
-    cpu.round_robin(deepcopy(processes1), tslice)
+    cpu.roundRobin(deepcopy(processes), timeSlice)
